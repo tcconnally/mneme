@@ -49,7 +49,10 @@ impl Section {
 /// provenance spec's "absent means unlabeled" rule).
 pub fn parse_body_provenance(
     body_json: &str,
-) -> (Option<crate::models::OriginRecord>, Vec<crate::models::ExternalRef>) {
+) -> (
+    Option<crate::models::OriginRecord>,
+    Vec<crate::models::ExternalRef>,
+) {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(body_json) else {
         return (None, Vec::new());
     };
@@ -69,10 +72,8 @@ pub fn parse_body_provenance(
 /// durable memory.
 pub fn classify(entity: &Entity) -> Section {
     let (origin, external_refs) = parse_body_provenance(&entity.body_json);
-    let inferred_origin = origin
-        .as_ref()
-        .and_then(|o| o.memory_kind.as_deref())
-        == Some("inferred");
+    let inferred_origin =
+        origin.as_ref().and_then(|o| o.memory_kind.as_deref()) == Some("inferred");
     let derived_type = entity.entity_type == "fact_derived";
     let derived_ref = external_refs
         .iter()
@@ -294,7 +295,10 @@ impl ProjectionRequest {
                 return Err("freshness_window_days must be >= 1".to_string());
             }
         }
-        if !matches!(min_trust.as_str(), "candidate" | "corroborated" | "verified") {
+        if !matches!(
+            min_trust.as_str(),
+            "candidate" | "corroborated" | "verified"
+        ) {
             return Err(format!(
                 "invalid min_trust '{min_trust}': expected 'candidate', 'corroborated', or 'verified'"
             ));
@@ -339,7 +343,10 @@ impl ProjectionRequest {
 /// Build a task projection: fused recall (fts5 + temporal arms) into a
 /// pool, deterministic sectioning + trust/freshness filtering, then the
 /// compact report contract.
-pub fn build_projection(db: &Database, req: &ProjectionRequest) -> Result<ProjectionReport, String> {
+pub fn build_projection(
+    db: &Database,
+    req: &ProjectionRequest,
+) -> Result<ProjectionReport, String> {
     let now_ms = req.query_time_unix_ms.unwrap_or_else(crate::db::now_ms);
     let weights = ValidityWeights::default();
     let pool_limit = req.limit.saturating_mul(3).min(300);
@@ -394,7 +401,9 @@ pub fn build_projection(db: &Database, req: &ProjectionRequest) -> Result<Projec
         .map_err(|e| format!("projection recall failed: {e}"))?;
 
     let min_rank = min_trust_rank(&req.min_trust);
-    let window_ms = req.freshness_window_days.map(|d| d.saturating_mul(86_400_000));
+    let window_ms = req
+        .freshness_window_days
+        .map(|d| d.saturating_mul(86_400_000));
 
     let mut live: Vec<ProjectionItem> = Vec::new();
     let mut durable: Vec<ProjectionItem> = Vec::new();
@@ -514,7 +523,11 @@ pub fn build_projection(db: &Database, req: &ProjectionRequest) -> Result<Projec
         trace: ProjectionTrace {
             method: "task-projection-v1".to_string(),
             pool_size: entities.len(),
-            recall_modes: vec!["fused".to_string(), "fts5".to_string(), "temporal".to_string()],
+            recall_modes: vec![
+                "fused".to_string(),
+                "fts5".to_string(),
+                "temporal".to_string(),
+            ],
         },
     };
     Ok(report)

@@ -224,7 +224,10 @@ mod tests {
     fn quantize_int8_zero_vector_stores_zero_scale_and_codes() {
         let blob = quantize_int8(&[0.0; 8]);
         assert_eq!(blob[0], TAG_INT8);
-        assert_eq!(f32::from_le_bytes([blob[1], blob[2], blob[3], blob[4]]), 0.0);
+        assert_eq!(
+            f32::from_le_bytes([blob[1], blob[2], blob[3], blob[4]]),
+            0.0
+        );
         assert!(blob[5..].iter().all(|&b| b == 0));
     }
 
@@ -317,6 +320,9 @@ mod tests {
         assert_eq!(classify_stored(&[]), None);
         // A 5-byte f32 blob is dim 1.25 — impossible; tags must not fire on
         // random bytes when the length is also a multiple of 4 (priority).
-        assert_eq!(classify_stored(&[0x01, 0, 0, 0, 0, 0, 0, 0]), Some((EmbeddingQuant::F32, 2)));
+        assert_eq!(
+            classify_stored(&[0x01, 0, 0, 0, 0, 0, 0, 0]),
+            Some((EmbeddingQuant::F32, 2))
+        );
     }
 }

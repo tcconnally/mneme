@@ -55,18 +55,9 @@ fn issue_key(code: &str, target: &str) -> String {
 }
 
 fn score_for(issues: &[DriftIssue]) -> i64 {
-    let errors = issues
-        .iter()
-        .filter(|i| i.severity == "error")
-        .count() as i64;
-    let warnings = issues
-        .iter()
-        .filter(|i| i.severity == "warning")
-        .count() as i64;
-    let infos = issues
-        .iter()
-        .filter(|i| i.severity == "info")
-        .count() as i64;
+    let errors = issues.iter().filter(|i| i.severity == "error").count() as i64;
+    let warnings = issues.iter().filter(|i| i.severity == "warning").count() as i64;
+    let infos = issues.iter().filter(|i| i.severity == "info").count() as i64;
     (100 - 10 * errors - 3 * warnings - infos).max(0)
 }
 
@@ -83,7 +74,8 @@ fn check_reference_integrity(db: &Database, ws: Option<&str>) -> Result<Vec<Drif
         let mut q = if let Some(w) = ws {
             stmt.query(params![w]).map_err(|e| e.to_string())?
         } else {
-            stmt.query(params![ws.unwrap_or("")]).map_err(|e| e.to_string())?
+            stmt.query(params![ws.unwrap_or("")])
+                .map_err(|e| e.to_string())?
         };
         while let Some(row) = q.next().map_err(|e| e.to_string())? {
             let id: String = row.get(0).map_err(|e| e.to_string())?;
@@ -139,7 +131,9 @@ fn check_grounding_status(db: &Database, ws: Option<&str>) -> Result<Vec<DriftIs
              ORDER BY updated_at_unix_ms DESC LIMIT 500",
         )
         .map_err(|e| e.to_string())?;
-    let mut q = stmt.query(params![ws.unwrap_or("")]).map_err(|e| e.to_string())?;
+    let mut q = stmt
+        .query(params![ws.unwrap_or("")])
+        .map_err(|e| e.to_string())?;
     while let Some(row) = q.next().map_err(|e| e.to_string())? {
         let target_ref: String = row.get(0).map_err(|e| e.to_string())?;
         let entity_id: String = row.get(1).map_err(|e| e.to_string())?;
@@ -188,7 +182,9 @@ fn check_path_existence(db: &Database, ws: Option<&str>) -> Result<Vec<DriftIssu
              ORDER BY updated_at_unix_ms DESC LIMIT 1000",
         )
         .map_err(|e| e.to_string())?;
-    let mut q = stmt.query(params![ws.unwrap_or("")]).map_err(|e| e.to_string())?;
+    let mut q = stmt
+        .query(params![ws.unwrap_or("")])
+        .map_err(|e| e.to_string())?;
     while let Some(row) = q.next().map_err(|e| e.to_string())? {
         let target_ref: String = row.get(0).map_err(|e| e.to_string())?;
         let entity_id: String = row.get(1).map_err(|e| e.to_string())?;
@@ -209,9 +205,7 @@ fn check_path_existence(db: &Database, ws: Option<&str>) -> Result<Vec<DriftIssu
                 code: "PATH_EXISTENCE".into(),
                 severity: "error".into(),
                 target: target_ref.clone(),
-                detail: format!(
-                    "grounded file missing on disk: {target_ref} (entity {entity_id})"
-                ),
+                detail: format!("grounded file missing on disk: {target_ref} (entity {entity_id})"),
                 repairable: false,
             });
         }
@@ -231,7 +225,9 @@ fn check_cross_file_conflicts(db: &Database, ws: Option<&str>) -> Result<Vec<Dri
             "SELECT id, body_json FROM entities WHERE archived = 0 AND json_valid(body_json) AND (?1 = '' OR workspace_hash = ?1) LIMIT 5000",
         )
         .map_err(|e| e.to_string())?;
-    let mut q = stmt.query(params![ws.unwrap_or("")]).map_err(|e| e.to_string())?;
+    let mut q = stmt
+        .query(params![ws.unwrap_or("")])
+        .map_err(|e| e.to_string())?;
     let mut claims: std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>> =
         std::collections::BTreeMap::new();
     while let Some(row) = q.next().map_err(|e| e.to_string())? {
@@ -328,16 +324,10 @@ pub fn drift_check(
         counts.insert(code.to_string(), serde_json::json!(found.len()));
         issues.extend(found);
     };
-    push(
-        "REFERENCE_INTEGRITY",
-        check_reference_integrity(db, ws)?,
-    );
+    push("REFERENCE_INTEGRITY", check_reference_integrity(db, ws)?);
     push("GROUNDING_STATUS", check_grounding_status(db, ws)?);
     push("PATH_EXISTENCE", check_path_existence(db, ws)?);
-    push(
-        "CROSS_FILE_CONFLICT",
-        check_cross_file_conflicts(db, ws)?,
-    );
+    push("CROSS_FILE_CONFLICT", check_cross_file_conflicts(db, ws)?);
     push("STALE_ENTITY", check_staleness(db, ws, staleness_days)?);
     let errors = issues.iter().filter(|i| i.severity == "error").count();
     let warnings = issues.iter().filter(|i| i.severity == "warning").count();
@@ -384,14 +374,15 @@ pub fn drift_repair(
             )
             .ok();
         let Some(links_raw) = links_raw else { continue };
-        let parsed: serde_json::Value =
-            serde_json::from_str(&links_raw).unwrap_or_default();
-        let Some(arr) = parsed.as_array() else { continue };
+        let parsed: serde_json::Value = serde_json::from_str(&links_raw).unwrap_or_default();
+        let Some(arr) = parsed.as_array() else {
+            continue;
+        };
         let mut kept: Vec<serde_json::Value> = Vec::new();
         let mut removed = 0usize;
         for link in arr {
-            let is_derived = link.get("relationship").and_then(|r| r.as_str())
-                == Some("derived_from");
+            let is_derived =
+                link.get("relationship").and_then(|r| r.as_str()) == Some("derived_from");
             let keep = if !is_derived {
                 true
             } else {

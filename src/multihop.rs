@@ -71,7 +71,10 @@ pub fn query_entities(query: &str) -> Vec<String> {
 /// LongMemEval lexicon-coverage primitive). The body is compared lowercased.
 pub fn coverage(body: &str, entities: &[String]) -> usize {
     let lower = body.to_lowercase();
-    entities.iter().filter(|t| lower.contains(t.as_str())).count()
+    entities
+        .iter()
+        .filter(|t| lower.contains(t.as_str()))
+        .count()
 }
 
 /// Greedy entity-coverage selection within the caller limit and the token
@@ -100,9 +103,7 @@ pub fn coverage_select(
             let (e, _) = &pool[idx];
             let cov_eff = entities
                 .iter()
-                .filter(|t| {
-                    !covered.contains(t) && e.body_json.to_lowercase().contains(t.as_str())
-                })
+                .filter(|t| !covered.contains(t) && e.body_json.to_lowercase().contains(t.as_str()))
                 .count();
             let better = match best {
                 None => cov_eff > 0,
@@ -148,7 +149,11 @@ pub fn coverage_select(
         }
     }
 
-    let uncovered: Vec<String> = entities.iter().filter(|t| !covered.contains(t)).cloned().collect();
+    let uncovered: Vec<String> = entities
+        .iter()
+        .filter(|t| !covered.contains(t))
+        .cloned()
+        .collect();
     let expanded_ids = Vec::new(); // filled by the caller (db integration)
     let entities_out = selected.iter().map(|&i| pool[i].0.clone()).collect();
     let selection_order = selected.iter().map(|&i| pool[i].0.id.clone()).collect();
@@ -183,7 +188,11 @@ mod tests {
     #[test]
     fn coverage_counts_contained_entities() {
         let body = "the database migration completed on schedule";
-        let ents = vec!["database".to_string(), "migration".to_string(), "pipeline".to_string()];
+        let ents = vec![
+            "database".to_string(),
+            "migration".to_string(),
+            "pipeline".to_string(),
+        ];
         assert_eq!(coverage(body, &ents), 2);
     }
 
@@ -234,7 +243,11 @@ mod tests {
             mk("e1", "the database migration finished", 0.9),
             mk("e3", "the import pipeline is failing", 0.8),
         ];
-        let ents = vec!["database".to_string(), "migration".to_string(), "pipeline".to_string()];
+        let ents = vec![
+            "database".to_string(),
+            "migration".to_string(),
+            "pipeline".to_string(),
+        ];
         let (selected, trace) = coverage_select(&pool, &ents, 2, 100);
         // e1 (covers 2) beats e2 (covers 0) despite e2's higher score.
         assert_eq!(selected[0].id, "e1");

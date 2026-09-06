@@ -149,10 +149,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     fn rates(pairs: &[(&str, f64)]) -> BTreeMap<String, f64> {
-        pairs
-            .iter()
-            .map(|(k, v)| (k.to_string(), *v))
-            .collect()
+        pairs.iter().map(|(k, v)| (k.to_string(), *v)).collect()
     }
 
     fn thresh(floor: f64, regression_delta: f64) -> BTreeMap<String, EvalThresholds> {
@@ -177,7 +174,10 @@ mod tests {
     #[test]
     fn stable_high_metric_has_no_breach() {
         let current = rates(&[("validity_rate", 1.0)]);
-        let history = vec![rates(&[("validity_rate", 0.98)]), rates(&[("validity_rate", 0.99)])];
+        let history = vec![
+            rates(&[("validity_rate", 0.98)]),
+            rates(&[("validity_rate", 0.99)]),
+        ];
         let breaches = compute_regression(&current, &history, &thresh(0.9, 0.05));
         assert!(breaches.is_empty(), "expected no breach, got {breaches:?}");
     }
@@ -196,7 +196,10 @@ mod tests {
     #[test]
     fn regression_breach_when_drop_exceeds_delta() {
         let current = rates(&[("validity_rate", 0.90)]);
-        let history = vec![rates(&[("validity_rate", 0.98)]), rates(&[("validity_rate", 0.98)])];
+        let history = vec![
+            rates(&[("validity_rate", 0.98)]),
+            rates(&[("validity_rate", 0.98)]),
+        ];
         let breaches = compute_regression(&current, &history, &thresh(0.9, 0.05));
         assert_eq!(breaches.len(), 1);
         assert_eq!(breaches[0].threshold_type, "regression");
@@ -219,7 +222,11 @@ mod tests {
         let current = rates(&[("scope_invalid_recall_rate", 0.20)]);
         let history = vec![rates(&[("scope_invalid_recall_rate", 0.05)])];
         let breaches = compute_regression(&current, &history, &thresh(0.1, 0.05));
-        assert_eq!(breaches.len(), 2, "cap and regression both breached: {breaches:?}");
+        assert_eq!(
+            breaches.len(),
+            2,
+            "cap and regression both breached: {breaches:?}"
+        );
         assert!(breaches.iter().all(|b| b.direction == "lower_better"));
         assert!(breaches.iter().any(|b| b.threshold_type == "floor"));
         assert!(breaches.iter().any(|b| b.threshold_type == "regression"));
@@ -260,7 +267,10 @@ mod tests {
 
     #[test]
     fn direction_for_maps_lower_is_better_metrics() {
-        assert_eq!(direction_for("scope_invalid_recall_rate"), Direction::LowerIsBetter);
+        assert_eq!(
+            direction_for("scope_invalid_recall_rate"),
+            Direction::LowerIsBetter
+        );
         assert_eq!(direction_for("stale_recall_rate"), Direction::LowerIsBetter);
         assert_eq!(direction_for("validity_rate"), Direction::HigherIsBetter);
         assert_eq!(direction_for("unknown_metric"), Direction::HigherIsBetter);
@@ -269,10 +279,13 @@ mod tests {
     #[test]
     fn mixed_metrics_report_only_the_breaching_one() {
         let current = rates(&[
-            ("validity_rate", 0.85),               // floor breach (delta vs 0.88 mean is within tolerance)
-            ("scope_invalid_recall_rate", 0.0),    // fine
+            ("validity_rate", 0.85), // floor breach (delta vs 0.88 mean is within tolerance)
+            ("scope_invalid_recall_rate", 0.0), // fine
         ]);
-        let history = vec![rates(&[("validity_rate", 0.88), ("scope_invalid_recall_rate", 0.02)])];
+        let history = vec![rates(&[
+            ("validity_rate", 0.88),
+            ("scope_invalid_recall_rate", 0.02),
+        ])];
         let breaches = compute_regression(&current, &history, &thresh(0.9, 0.05));
         assert_eq!(breaches.len(), 1);
         assert_eq!(breaches[0].metric, "validity_rate");

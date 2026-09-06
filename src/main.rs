@@ -17,11 +17,11 @@ mod derived_visibility;
 mod embedding;
 mod encryption;
 mod eval_regression;
-mod extraction;
-mod extraction_loss;
 mod evidence_lanes;
 mod evidence_sufficiency;
 mod experience_projection;
+mod extraction;
+mod extraction_loss;
 mod fingerprint;
 mod live_update;
 mod provider_source;
@@ -63,17 +63,17 @@ mod preload;
 mod projection;
 mod retrieval_skills;
 mod retrieval_telemetry;
-mod safe_outcome;
-mod selection_decisions;
-mod source_chain;
 #[cfg(test)]
 mod revocation_cutoff;
 mod rollback_repair;
+mod safe_outcome;
 mod schema;
 mod segments;
+mod selection_decisions;
 mod signed_profile;
 mod signed_transition;
 mod sleep;
+mod source_chain;
 pub(crate) mod stage_trace;
 mod state_auditor;
 mod temporal_decay;
@@ -3192,7 +3192,9 @@ fn run() {
                     encrypted, skipped, failed
                 );
                 if failed > 0 {
-                    eprintln!("perseus-vault: init --rekey: some records failed — check stderr above");
+                    eprintln!(
+                        "perseus-vault: init --rekey: some records failed — check stderr above"
+                    );
                     std::process::exit(1);
                 }
             }

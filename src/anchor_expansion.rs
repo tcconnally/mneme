@@ -95,7 +95,11 @@ pub fn load_anchors_with_encryption(
     for row in rows {
         let (content, weight) = row?;
         if !content.trim().is_empty() {
-            anchors.push(Anchor { text: content, weight, source: "keystone" });
+            anchors.push(Anchor {
+                text: content,
+                weight,
+                source: "keystone",
+            });
         }
     }
     drop(stmt);
@@ -105,8 +109,7 @@ pub fn load_anchors_with_encryption(
     // Placeholders are EXPLICITLY numbered (anonymous `?` mixed with `?N`
     // reuses slot 1 in SQLite and silently binds the wrong value).
     let cats = anchor_categories();
-    let cat_placeholders: Vec<String> =
-        (0..cats.len()).map(|i| format!("?{}", i + 2)).collect();
+    let cat_placeholders: Vec<String> = (0..cats.len()).map(|i| format!("?{}", i + 2)).collect();
     let limit_slot = cats.len() + 2;
     let sql = format!(
         "SELECT e.category, e.key, e.body_json FROM entities e \
@@ -137,21 +140,18 @@ pub fn load_anchors_with_encryption(
     for row in rows {
         let (category, key, raw_body) = row?;
         let body = match encryption {
-            Some(enc) => match Database::decrypt_body_with_aad_fallback(
-                enc,
-                &raw_body,
-                &category,
-                &key,
-            ) {
-                crate::encryption::BodyDecrypt::Plaintext(body)
-                | crate::encryption::BodyDecrypt::LegacyPlaintext(body) => body,
-                crate::encryption::BodyDecrypt::AuthFailed(_) => {
-                    return Err(format!(
-                        "anchor body authentication failed for {category}:{key}"
-                    )
-                    .into());
+            Some(enc) => {
+                match Database::decrypt_body_with_aad_fallback(enc, &raw_body, &category, &key) {
+                    crate::encryption::BodyDecrypt::Plaintext(body)
+                    | crate::encryption::BodyDecrypt::LegacyPlaintext(body) => body,
+                    crate::encryption::BodyDecrypt::AuthFailed(_) => {
+                        return Err(format!(
+                            "anchor body authentication failed for {category}:{key}"
+                        )
+                        .into());
+                    }
                 }
-            },
+            }
             None => raw_body,
         };
         let text = extract_text(&body);
@@ -185,7 +185,10 @@ pub fn extract_text(body_json: &str) -> String {
         // No known field: fall back to the compact serialization.
         return value.to_string();
     }
-    value.as_str().map(|s| s.to_string()).unwrap_or_else(|| value.to_string())
+    value
+        .as_str()
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| value.to_string())
 }
 
 /// Build sanitized lexical queries from anchor texts: lowercase, strip
@@ -198,7 +201,13 @@ fn anchor_query_terms(anchors: &[Anchor], max_chars: usize) -> Vec<Vec<String>> 
             .text
             .chars()
             .take(max_chars)
-            .map(|c| if c.is_alphanumeric() || c.is_whitespace() { c } else { ' ' })
+            .map(|c| {
+                if c.is_alphanumeric() || c.is_whitespace() {
+                    c
+                } else {
+                    ' '
+                }
+            })
             .collect();
         let mut tokens: Vec<String> = text
             .split_whitespace()
@@ -295,10 +304,7 @@ mod tests {
             extract_text("{\"text\":\"warranty matters\"}"),
             "warranty matters"
         );
-        assert_eq!(
-            extract_text("{\"rule\":\"no secrets\"}"),
-            "no secrets"
-        );
+        assert_eq!(extract_text("{\"rule\":\"no secrets\"}"), "no secrets");
         assert_eq!(extract_text("plain body"), "plain body");
         assert!(extract_text("{\"opaque\": 1}").contains("opaque"));
     }
@@ -306,8 +312,16 @@ mod tests {
     #[test]
     fn anchor_queries_sanitize_and_drop_garbage() {
         let anchors = vec![
-            Anchor { text: "Warranty MATTERS!!! for expensive buys".into(), weight: 1.0, source: "decision" },
-            Anchor { text: "   ".into(), weight: 1.0, source: "decision" },
+            Anchor {
+                text: "Warranty MATTERS!!! for expensive buys".into(),
+                weight: 1.0,
+                source: "decision",
+            },
+            Anchor {
+                text: "   ".into(),
+                weight: 1.0,
+                source: "decision",
+            },
         ];
         let qs = anchor_queries(&anchors, 200);
         assert_eq!(qs.len(), 1);

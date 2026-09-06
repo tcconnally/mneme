@@ -101,10 +101,7 @@ pub fn parse_window(spec: &str) -> Result<(u32, u32), String> {
             .trim()
             .split_once(':')
             .ok_or_else(|| format!("maintenance window time {t:?} must be HH:MM"))?;
-        let h: u32 = h
-            .trim()
-            .parse()
-            .map_err(|_| format!("bad hour in {t:?}"))?;
+        let h: u32 = h.trim().parse().map_err(|_| format!("bad hour in {t:?}"))?;
         let m: u32 = m
             .trim()
             .parse()
@@ -314,10 +311,7 @@ pub fn acquire_maintenance(db: &Database, op: &str) -> Result<MaintenanceLock, S
             Ok(g) => {
                 lock_unpoisoned(lock_holders()).insert(path.clone(), op.to_string());
                 RUNS_STARTED.fetch_add(1, Ordering::Relaxed);
-                return Ok(MaintenanceLock {
-                    _guard: g,
-                    path,
-                });
+                return Ok(MaintenanceLock { _guard: g, path });
             }
             Err(_) if attempt < 3 => {
                 std::thread::sleep(std::time::Duration::from_millis(25));
@@ -339,9 +333,7 @@ pub fn acquire_maintenance(db: &Database, op: &str) -> Result<MaintenanceLock, S
 }
 
 pub fn maintenance_lock_held(db: &Database) -> Option<String> {
-    lock_unpoisoned(lock_holders())
-        .get(&db.db_path())
-        .cloned()
+    lock_unpoisoned(lock_holders()).get(&db.db_path()).cloned()
 }
 
 // ─── report stamping + status ────────────────────────────────────────────
@@ -474,11 +466,7 @@ pub(crate) mod tests {
             "got: {err}"
         );
         drop(l1);
-        assert_eq!(
-            maintenance_lock_held(db),
-            None,
-            "lock must release on drop"
-        );
+        assert_eq!(maintenance_lock_held(db), None, "lock must release on drop");
         // Non-reserved: immediately acquirable again (no lingering capacity).
         let l2 = acquire_maintenance(db, "test-op-2").expect("re-acquire after drop");
         drop(l2);

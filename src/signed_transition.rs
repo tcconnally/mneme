@@ -121,7 +121,9 @@ pub fn domain_commitment(domain: &[u8], value: &Value) -> String {
     let mut h = Sha256::new();
     h.update(domain);
     h.update(b"\x00");
-    h.update(crate::signed_profile::canonical_json_bytes(&quantize(value)));
+    h.update(crate::signed_profile::canonical_json_bytes(&quantize(
+        value,
+    )));
     format!("{:x}", h.finalize())
 }
 
@@ -167,11 +169,9 @@ fn chain_hash_of(
     let mut h = Sha256::new();
     h.update(DOMAIN_CHAIN);
     h.update(b"\x00");
-    h.update(
-        crate::signed_profile::canonical_json_bytes(
-            &serde_json::to_value(payload).unwrap_or(Value::Null),
-        ),
-    );
+    h.update(crate::signed_profile::canonical_json_bytes(
+        &serde_json::to_value(payload).unwrap_or(Value::Null),
+    ));
     h.update(b"\x00");
     h.update(commitment_old.as_bytes());
     h.update(b"\x00");
@@ -202,10 +202,10 @@ pub fn sign_transition(
         new_value: quantize(new_value),
         predecessor_hash: predecessor_hash.into(),
     };
-    let canonical =
-        crate::signed_profile::canonical_json_bytes(&serde_json::to_value(&payload).map_err(|e| {
-            format!("payload serialization failed: {e}")
-        })?);
+    let canonical = crate::signed_profile::canonical_json_bytes(
+        &serde_json::to_value(&payload)
+            .map_err(|e| format!("payload serialization failed: {e}"))?,
+    );
     let signature = signing.sign(&canonical);
     let commitment_old = domain_commitment(DOMAIN_OLD, &payload.old_value);
     let commitment_new = domain_commitment(DOMAIN_NEW, &payload.new_value);
@@ -246,10 +246,10 @@ pub fn verify_transition(
     if commitment_new != t.commitment_new {
         return Err("new-value commitment mismatch (tampered or unquantized payload)".into());
     }
-    let canonical =
-        crate::signed_profile::canonical_json_bytes(&serde_json::to_value(&t.payload).map_err(
-            |e| format!("payload serialization failed: {e}"),
-        )?);
+    let canonical = crate::signed_profile::canonical_json_bytes(
+        &serde_json::to_value(&t.payload)
+            .map_err(|e| format!("payload serialization failed: {e}"))?,
+    );
     let signature = Signature::from_slice(&b64_decode(&t.signature_b64)?)
         .map_err(|e| format!("invalid signature encoding: {e}"))?;
     public
@@ -311,7 +311,8 @@ mod tests {
     #[test]
     fn unsigned_record_fails() {
         let signing = test_key();
-        let mut t = sign_transition(&signing, 1, "mem-x", &json!({}), &json!({"a": 1}), "").unwrap();
+        let mut t =
+            sign_transition(&signing, 1, "mem-x", &json!({}), &json!({"a": 1}), "").unwrap();
         t.signature_b64 = b64_encode(&[0u8; 64]);
         let err = verify_transition(&t, &key_b64(&signing)).unwrap_err();
         assert!(err.contains("signature"), "unexpected error: {err}");
@@ -320,10 +321,14 @@ mod tests {
     #[test]
     fn tampered_old_value_fails_commitment_check() {
         let signing = test_key();
-        let mut t = sign_transition(&signing, 1, "mem-x", &json!({"v": 1}), &json!({"v": 2}), "").unwrap();
+        let mut t =
+            sign_transition(&signing, 1, "mem-x", &json!({"v": 1}), &json!({"v": 2}), "").unwrap();
         t.payload.old_value = json!({"v": 99});
         let err = verify_transition(&t, &key_b64(&signing)).unwrap_err();
-        assert!(err.contains("old-value commitment"), "unexpected error: {err}");
+        assert!(
+            err.contains("old-value commitment"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]
@@ -341,7 +346,10 @@ mod tests {
         let q = quantize(&raw);
         let a = crate::signed_profile::canonical_json_bytes(&q);
         let b = crate::signed_profile::canonical_json_bytes(&quantize(&q));
-        assert_eq!(a, b, "quantization must be idempotent and order-insensitive");
+        assert_eq!(
+            a, b,
+            "quantization must be idempotent and order-insensitive"
+        );
         assert_eq!(q["z"], json!(0.1235));
     }
 
@@ -350,29 +358,63 @@ mod tests {
         let v = json!({"score": 0.5});
         let old = domain_commitment(DOMAIN_OLD, &v);
         let new = domain_commitment(DOMAIN_NEW, &v);
-        assert_ne!(old, new, "identical values under different domains must hash differently");
+        assert_ne!(
+            old, new,
+            "identical values under different domains must hash differently"
+        );
     }
 
     #[test]
     fn chain_hash_binds_predecessor() {
         let signing = test_key();
         let t1 = sign_transition(&signing, 1, "mem-a", &json!({}), &json!({"v": 1}), "").unwrap();
-        let t2a = sign_transition(&signing, 1, "mem-b", &json!({}), &json!({"v": 2}), &t1.chain_hash).unwrap();
-        let t2b = sign_transition(&signing, 1, "mem-b", &json!({}), &json!({"v": 2}), "deadbeef").unwrap();
+        let t2a = sign_transition(
+            &signing,
+            1,
+            "mem-b",
+            &json!({}),
+            &json!({"v": 2}),
+            &t1.chain_hash,
+        )
+        .unwrap();
+        let t2b = sign_transition(
+            &signing,
+            1,
+            "mem-b",
+            &json!({}),
+            &json!({"v": 2}),
+            "deadbeef",
+        )
+        .unwrap();
         assert_eq!(t2a.payload.predecessor_hash, t1.chain_hash);
-        assert_ne!(t2a.chain_hash, t2b.chain_hash, "a different predecessor must change the chain hash");
+        assert_ne!(
+            t2a.chain_hash, t2b.chain_hash,
+            "a different predecessor must change the chain hash"
+        );
     }
 
     #[test]
     fn portable_verifier_reproduces_writer_result() {
         let signing = test_key();
-        let t = sign_transition(&signing, 7, "mem-p", &json!({"layer": "working"}), &json!({"layer": "core"}), "abc").unwrap();
+        let t = sign_transition(
+            &signing,
+            7,
+            "mem-p",
+            &json!({"layer": "working"}),
+            &json!({"layer": "core"}),
+            "abc",
+        )
+        .unwrap();
         // Writer-side verification is the same pure function the portable
         // verifier uses — assert full field equality with a recomputation.
         let v = verify_transition(&t, &key_b64(&signing)).unwrap();
-        let canonical = crate::signed_profile::canonical_json_bytes(&serde_json::to_value(&t.payload).unwrap());
+        let canonical =
+            crate::signed_profile::canonical_json_bytes(&serde_json::to_value(&t.payload).unwrap());
         let sig = Signature::from_slice(&b64_decode(&t.signature_b64).unwrap()).unwrap();
-        assert!(signing.verifying_key().verify_strict(&canonical, &sig).is_ok());
+        assert!(signing
+            .verifying_key()
+            .verify_strict(&canonical, &sig)
+            .is_ok());
         assert_eq!(v.chain_hash, t.chain_hash);
     }
 
@@ -446,7 +488,9 @@ mod tests {
             .unwrap_err();
         assert!(err.contains("no signer epoch"), "unexpected error: {err}");
         // Register an epoch → signed regime.
-        let fp = db.register_signer_epoch(2, &b64_encode(&[11u8; 32])).unwrap();
+        let fp = db
+            .register_signer_epoch(2, &b64_encode(&[11u8; 32]))
+            .unwrap();
         assert_eq!(fp.len(), 64);
         let t = db
             .record_signed_transition("mem-a", &json!({"v": 0}), &json!({"v": 1}))
@@ -464,7 +508,8 @@ mod tests {
     #[test]
     fn chain_audit_detects_tampering_and_blocks_forks() {
         let db = crate::db::TestDatabase::new("mutmem-chain");
-        db.register_signer_epoch(1, &b64_encode(&[7u8; 32])).unwrap();
+        db.register_signer_epoch(1, &b64_encode(&[7u8; 32]))
+            .unwrap();
         let t1 = db
             .record_signed_transition("mem-a", &json!({"v": 1}), &json!({"v": 2}))
             .unwrap()
@@ -500,7 +545,10 @@ mod tests {
                  VALUES ('stn-fork', 'mem-z', 1, 'ff', '{}', '{}', 'aa', 'bb', '', 'cc', 'dd', 1)",
                 [],
             );
-            assert!(dup.is_err(), "the UNIQUE predecessor index must reject a second genesis");
+            assert!(
+                dup.is_err(),
+                "the UNIQUE predecessor index must reject a second genesis"
+            );
         }
     }
 
@@ -549,7 +597,8 @@ mod tests {
             "pre-label top-5 should be dominated by injected content, got {before:?}"
         );
         // Authorize the signing regime; sign a poison label on every injected row.
-        db.register_signer_epoch(1, &b64_encode(&[42u8; 32])).unwrap();
+        db.register_signer_epoch(1, &b64_encode(&[42u8; 32]))
+            .unwrap();
         for id in &poisoned {
             db.set_poison_label(id, "poison_likely", "PoisonedRAG-style injected adaptation")
                 .unwrap();

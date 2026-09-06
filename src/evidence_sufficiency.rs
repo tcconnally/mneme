@@ -360,7 +360,10 @@ impl EvidenceSufficiencyReport {
                 || !is_sha256(&conflict.references_sha256)
                 || conflict.reference_count < 2
                 || conflict.reference_digests.len() != conflict.reference_count
-                || conflict.reference_digests.iter().any(|digest| !is_sha256(digest))
+                || conflict
+                    .reference_digests
+                    .iter()
+                    .any(|digest| !is_sha256(digest))
                 || conflict.reason.is_empty()
             {
                 return Err("sufficiency conflict metadata is invalid".to_string());
@@ -1068,7 +1071,9 @@ mod tests {
     #[test]
     fn excluded_evidence_and_conflicting_references_are_answer_visible() {
         let mut requirements = requirement_set();
-        requirements.required_evidence.push("evidence-missing".to_string());
+        requirements
+            .required_evidence
+            .push("evidence-missing".to_string());
         requirements.conflicts = vec![ConflictRequirement {
             conflict_id: "conflict-deployment".to_string(),
             evidence_ids: vec!["evidence-a".to_string(), "evidence-b".to_string()],
@@ -1094,12 +1099,21 @@ mod tests {
             .any(|entry| entry["reason"] == "unavailable_evidence" && entry["count"] == 1));
         assert_eq!(value["conflicts"][0]["reference_count"], 2, "{value}");
         assert_eq!(
-            value["conflicts"][0]["references_sha256"].as_str().unwrap().len(),
+            value["conflicts"][0]["references_sha256"]
+                .as_str()
+                .unwrap()
+                .len(),
             64,
             "{value}"
         );
         let serialized = value.to_string();
-        assert!(!serialized.contains("evidence-a"), "raw conflict IDs leaked: {value}");
-        assert!(!serialized.contains("evidence-b"), "raw conflict IDs leaked: {value}");
+        assert!(
+            !serialized.contains("evidence-a"),
+            "raw conflict IDs leaked: {value}"
+        );
+        assert!(
+            !serialized.contains("evidence-b"),
+            "raw conflict IDs leaked: {value}"
+        );
     }
 }

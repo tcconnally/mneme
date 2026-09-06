@@ -161,9 +161,9 @@ fn decrypt_body(
         crate::encryption::BodyDecrypt::LegacyPlaintext(_) => Err(format!(
             "plaintext body found in encrypted store for {category}:{key}"
         )),
-        crate::encryption::BodyDecrypt::AuthFailed(_) => {
-            Err(format!("decryption failed for encrypted body {category}:{key}"))
-        }
+        crate::encryption::BodyDecrypt::AuthFailed(_) => Err(format!(
+            "decryption failed for encrypted body {category}:{key}"
+        )),
     }
 }
 
@@ -188,7 +188,11 @@ impl Inspector {
         Self::open_ro_inner(path, key_file, true)
     }
 
-    fn open_ro_inner(path: &str, key_file: Option<&str>, use_env_key: bool) -> Result<Self, String> {
+    fn open_ro_inner(
+        path: &str,
+        key_file: Option<&str>,
+        use_env_key: bool,
+    ) -> Result<Self, String> {
         let conn = Connection::open_with_flags(
             path,
             rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -242,7 +246,9 @@ impl Inspector {
         };
         let protected_store = canary_present || profile_protected;
         let key_file = key_file.map(|s| s.to_string()).or_else(|| {
-            use_env_key.then(|| std::env::var("PERSEUS_VAULT_KEY_FILE").ok()).flatten()
+            use_env_key
+                .then(|| std::env::var("PERSEUS_VAULT_KEY_FILE").ok())
+                .flatten()
         });
         let enc = match key_file {
             Some(kf) => Some(
@@ -597,19 +603,14 @@ impl Inspector {
                     let body_plaintext = if self.enc.is_none() && self.protected_store {
                         ENCRYPTED_BODY_SENTINEL.to_string()
                     } else {
-                        decrypt_body(
-                            self.enc.as_ref(),
-                            &raw_body,
-                            &entity.category,
-                            &entity.key,
-                        )
-                        .map_err(|error| {
-                            rusqlite::Error::FromSqlConversionFailure(
-                                8,
-                                rusqlite::types::Type::Text,
-                                Box::new(std::io::Error::other(error)),
-                            )
-                        })?
+                        decrypt_body(self.enc.as_ref(), &raw_body, &entity.category, &entity.key)
+                            .map_err(|error| {
+                                rusqlite::Error::FromSqlConversionFailure(
+                                    8,
+                                    rusqlite::types::Type::Text,
+                                    Box::new(std::io::Error::other(error)),
+                                )
+                            })?
                     };
                     Ok(HistoryRow {
                         history_id: r.get(0)?,
@@ -1041,10 +1042,7 @@ mod tests {
         let enc = crate::encryption::EncryptionManager::from_key_file(&key_path).unwrap();
         let body = r#"{"note":"current encrypted history"}"#;
         let ciphertext = enc
-            .encrypt(
-                body,
-                crate::db::Database::build_aad("enc", "k1").as_bytes(),
-            )
+            .encrypt(body, crate::db::Database::build_aad("enc", "k1").as_bytes())
             .unwrap();
         {
             let conn = db.conn().unwrap();

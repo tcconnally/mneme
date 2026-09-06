@@ -107,10 +107,19 @@ mod tests {
         let db = TestDatabase::new("derived-vis");
         db.agent_upsert("agent-a", "owner", 0, "fleet-a").unwrap();
         let (workspace_src, _) = db
-            .remember(&entity("notes", "roadmap", "roadmap body", "tenant-a", "agent-a", "workspace"))
+            .remember(&entity(
+                "notes",
+                "roadmap",
+                "roadmap body",
+                "tenant-a",
+                "agent-a",
+                "workspace",
+            ))
             .unwrap();
         let (public_src, _) = db
-            .remember(&entity("notes", "faq", "faq body", "tenant-a", "agent-a", "public"))
+            .remember(&entity(
+                "notes", "faq", "faq body", "tenant-a", "agent-a", "public",
+            ))
             .unwrap();
         let (derived_id, _) = db
             .remember(&derived(
@@ -138,7 +147,14 @@ mod tests {
         let db = TestDatabase::new("derived-vis");
         db.agent_upsert("agent-a", "owner", 0, "fleet-a").unwrap();
         let (src, _) = db
-            .remember(&entity("notes", "src", "body", "tenant-a", "agent-a", "workspace"))
+            .remember(&entity(
+                "notes",
+                "src",
+                "body",
+                "tenant-a",
+                "agent-a",
+                "workspace",
+            ))
             .unwrap();
         let (derived_id, _) = db
             .remember(&derived(
@@ -165,7 +181,8 @@ mod tests {
     fn unreadable_input_refuses_the_whole_write() {
         let db = TestDatabase::new("derived-vis");
         db.agent_upsert("agent-a", "victim", 0, "fleet-a").unwrap();
-        db.agent_upsert("agent-b", "attacker", 0, "fleet-b").unwrap();
+        db.agent_upsert("agent-b", "attacker", 0, "fleet-b")
+            .unwrap();
         let (victim_src, _) = db
             .remember(&entity(
                 "pricing",
@@ -222,12 +239,26 @@ mod tests {
         let db = TestDatabase::new("derived-vis");
         db.agent_upsert("agent-a", "owner", 0, "fleet-a").unwrap();
         let (other, _) = db
-            .remember(&entity("notes", "other", "other row body", "tenant-a", "agent-a", "private"))
+            .remember(&entity(
+                "notes",
+                "other",
+                "other row body",
+                "tenant-a",
+                "agent-a",
+                "private",
+            ))
             .unwrap();
         // A related/similar link (NOT derived_from) carries no inheritance
         // semantics — visibility stays exactly as declared. (Distinct bodies:
         // identical (workspace, body) rows would collide in the dedup path.)
-        let mut e = entity("notes", "related-row", "related row body", "tenant-a", "agent-a", "workspace");
+        let mut e = entity(
+            "notes",
+            "related-row",
+            "related row body",
+            "tenant-a",
+            "agent-a",
+            "workspace",
+        );
         e.links = vec![crate::models::MemoryLink {
             target_id: other,
             relationship: "related".to_string(),
@@ -246,7 +277,9 @@ mod tests {
         let db = TestDatabase::new("derived-vis");
         db.agent_upsert("agent-a", "owner", 0, "fleet-a").unwrap();
         let (id, _) = db
-            .remember(&entity("notes", "legacy", "body", "tenant-a", "agent-a", "public"))
+            .remember(&entity(
+                "notes", "legacy", "body", "tenant-a", "agent-a", "public",
+            ))
             .unwrap();
         let stored = db.get_entity_by_id_public(&id).unwrap().unwrap();
         assert_eq!(stored.visibility, "public");

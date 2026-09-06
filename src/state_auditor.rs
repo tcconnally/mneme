@@ -42,11 +42,9 @@ fn entity_exists(db: &crate::db::Database, id: &str) -> bool {
         Ok(c) => c,
         Err(_) => return true, // audit must not fail on transient conn issues
     };
-    conn.query_row(
-        "SELECT COUNT(*) FROM entities WHERE id = ?1",
-        [id],
-        |r| r.get::<_, i64>(0),
-    )
+    conn.query_row("SELECT COUNT(*) FROM entities WHERE id = ?1", [id], |r| {
+        r.get::<_, i64>(0)
+    })
     .map(|n| n > 0)
     .unwrap_or(true)
 }
@@ -54,11 +52,7 @@ fn entity_exists(db: &crate::db::Database, id: &str) -> bool {
 /// Evaluate one state entry against its family's dependency rules.
 /// Returns the stale reason when the entry's implicit dependencies have
 /// drifted.
-pub fn evaluate(
-    db: &crate::db::Database,
-    key: &str,
-    value_json: &str,
-) -> Option<StaleFinding> {
+pub fn evaluate(db: &crate::db::Database, key: &str, value_json: &str) -> Option<StaleFinding> {
     // Rule 1: sleep proposals depend on both referenced entities.
     if key.starts_with(crate::sleep::STATE_PREFIX) {
         let v: serde_json::Value = serde_json::from_str(value_json).ok()?;
@@ -75,7 +69,10 @@ pub fn evaluate(
         if !missing.is_empty() {
             return Some(StaleFinding {
                 key: key.to_string(),
-                reason: format!("referenced entity(ies) no longer exist: {}", missing.join(", ")),
+                reason: format!(
+                    "referenced entity(ies) no longer exist: {}",
+                    missing.join(", ")
+                ),
             });
         }
         return None;
@@ -123,7 +120,11 @@ pub fn evaluate(
         if let Some(snap) = v.get("snapshot_entity_count").and_then(|n| n.as_i64()) {
             let conn = db.conn().ok()?;
             let live: i64 = conn
-                .query_row("SELECT COUNT(*) FROM entities WHERE archived = 0", [], |r| r.get(0))
+                .query_row(
+                    "SELECT COUNT(*) FROM entities WHERE archived = 0",
+                    [],
+                    |r| r.get(0),
+                )
                 .unwrap_or(snap); // on transient failure, do not flag
             if snap != live {
                 return Some(StaleFinding {
@@ -228,7 +229,11 @@ mod tests {
         let db = crate::db::TestDatabase::new("stateauditor-stats");
         set_state(&db, "skill.exp.s-a.fp1", serde_json::json!({"served": 1}));
         set_state(&db, "skill.exp.s-a.fp2", serde_json::json!({"served": 0}));
-        set_state(&db, "skill.exp.stats.s-a", serde_json::json!({"n": 5, "ok": 1}));
+        set_state(
+            &db,
+            "skill.exp.stats.s-a",
+            serde_json::json!({"n": 5, "ok": 1}),
+        );
         let f = evaluate(&db, "skill.exp.stats.s-a", "{\"n\": 5, \"ok\": 1}").expect("must flag");
         assert!(f.reason.contains("5"));
         let ok = evaluate(&db, "skill.exp.stats.s-a", "{\"n\": 2, \"ok\": 1}");
@@ -262,7 +267,11 @@ mod tests {
             "shadow_promote_last",
             serde_json::json!({"ids": ["sa-alive", "sa-gone"], "from": "s", "to": "m"}),
         );
-        set_state(&db, "cache.report", serde_json::json!({"snapshot_entity_count": 99}));
+        set_state(
+            &db,
+            "cache.report",
+            serde_json::json!({"snapshot_entity_count": 99}),
+        );
 
         // Dry-run: 3 findings, zero writes.
         let dry = db.state_audit(true).unwrap();
@@ -282,7 +291,10 @@ mod tests {
         // Sleep proposal demoted shape-compatibly: still a SleepProposal.
         let demoted = db.state_get("sleep_proposal.dead").unwrap().unwrap();
         assert!(demoted.value_json.contains("\"status\":\"stale\""));
-        assert!(demoted.value_json.contains("sa-gone"), "original refs preserved");
+        assert!(
+            demoted.value_json.contains("sa-gone"),
+            "original refs preserved"
+        );
         // Journal receipts anchored.
         let conn = db.conn().unwrap();
         let receipts: i64 = conn
@@ -295,14 +307,22 @@ mod tests {
         assert_eq!(receipts, 3);
         // Second pass: already-demoted entries are not re-flagged.
         let rep2 = db.state_audit(true).unwrap();
-        assert_eq!(rep2["stale_count"].as_i64().unwrap(), 0, "repair is idempotent — demoted entries are not re-flagged");
+        assert_eq!(
+            rep2["stale_count"].as_i64().unwrap(),
+            0,
+            "repair is idempotent — demoted entries are not re-flagged"
+        );
     }
 
     #[test]
     fn snapshot_count_rule_flags_drift() {
         let db = crate::db::TestDatabase::new("stateauditor-count");
         seed(&db, &entity_fixture("sa-count-a"));
-        set_state(&db, "cache.report", serde_json::json!({"snapshot_entity_count": 7}));
+        set_state(
+            &db,
+            "cache.report",
+            serde_json::json!({"snapshot_entity_count": 7}),
+        );
         let f = evaluate(&db, "cache.report", "{\"snapshot_entity_count\": 7}").expect("must flag");
         assert!(f.reason.contains("7"));
         assert!(evaluate(&db, "cache.report", "{\"snapshot_entity_count\": 1}").is_none());

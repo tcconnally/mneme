@@ -114,6 +114,7 @@ grpc = ["tonic", "prost", "prost-types", "tokio-stream", "tonic-build"]
 multimodal = ["zip", "pdf-extract"]
 
 [dev-dependencies]
+scheduled-thread-pool = "0.2.7"
 tower = { version = "0.5", features = ["util"] }
 
 [build-dependencies]

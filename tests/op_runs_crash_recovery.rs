@@ -83,10 +83,8 @@ fn op_runs_kill9_mid_decay_marks_interrupted_and_retry_recovers() {
     // empty init markers and its isolated key; no production database is touched.
     {
         let conn = rusqlite::Connection::open(&db).expect("fixture connection");
-        conn.execute_batch(
-            "DELETE FROM encryption_canary; DELETE FROM encryption_profile;",
-        )
-        .expect("clear empty encryption fixture markers");
+        conn.execute_batch("DELETE FROM encryption_canary; DELETE FROM encryption_profile;")
+            .expect("clear empty encryption fixture markers");
     }
     std::fs::remove_file(home.join(".perseus-vault/secret.key")).expect("remove fixture key");
 
@@ -225,7 +223,10 @@ fn op_runs_kill9_mid_decay_marks_interrupted_and_retry_recovers() {
                 |r| r.get(0),
             )
             .expect("child state");
-        assert_eq!(child_state, "queued", "child run must be queued for a worker");
+        assert_eq!(
+            child_state, "queued",
+            "child run must be queued for a worker"
+        );
     }
     // The child run carries the re-queued item.
     {
@@ -237,7 +238,10 @@ fn op_runs_kill9_mid_decay_marks_interrupted_and_retry_recovers() {
                 |r| r.get(0),
             )
             .expect("child item re-queued");
-        assert_eq!(item_state, "queued", "item must be re-queued in the child run");
+        assert_eq!(
+            item_state, "queued",
+            "item must be re-queued in the child run"
+        );
     }
 
     let _ = std::fs::remove_file(&db);

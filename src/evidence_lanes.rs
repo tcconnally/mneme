@@ -2,9 +2,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use rusqlite::OptionalExtension;
-use crate::source_chain::SourceChainIdentity;
 use crate::models::Entity;
+use crate::source_chain::SourceChainIdentity;
+use rusqlite::OptionalExtension;
 
 pub const EVIDENCE_RECEIPT_SCHEMA_VERSION: u32 = 1;
 const MAX_EVIDENCE_TOKENS: i64 = 65_536;
@@ -646,13 +646,20 @@ fn normalize_selected(mut selected: Vec<ReceiptSelection>) -> Vec<ReceiptSelecti
         entry.source_groups.dedup();
     }
     selected.sort_by(|a, b| {
-        (a.lane.order(), &a.entity_id, &a.revision, &a.span_sha256, a.chain_identity.commitment()).cmp(&(
-            b.lane.order(),
-            &b.entity_id,
-            &b.revision,
-            &b.span_sha256,
-            b.chain_identity.commitment(),
-        ))
+        (
+            a.lane.order(),
+            &a.entity_id,
+            &a.revision,
+            &a.span_sha256,
+            a.chain_identity.commitment(),
+        )
+            .cmp(&(
+                b.lane.order(),
+                &b.entity_id,
+                &b.revision,
+                &b.span_sha256,
+                b.chain_identity.commitment(),
+            ))
     });
     selected
 }
@@ -764,14 +771,11 @@ pub(crate) fn select_chain_coherent_entities(
     let Some(winner_key) = groups
         .iter()
         .max_by(|(left_key, left_members), (right_key, right_members)| {
-            left_members
-                .len()
-                .cmp(&right_members.len())
-                .then_with(|| {
-                    first_indices
-                        .get(*right_key)
-                        .cmp(&first_indices.get(*left_key))
-                })
+            left_members.len().cmp(&right_members.len()).then_with(|| {
+                first_indices
+                    .get(*right_key)
+                    .cmp(&first_indices.get(*left_key))
+            })
         })
         .map(|(key, _)| key.clone())
     else {
@@ -797,7 +801,10 @@ pub(crate) fn select_chain_coherent_scored(
         match entity_chain_key(entity) {
             Ok(Some(key)) => {
                 first_indices.entry(key.clone()).or_insert(index);
-                groups.entry(key.clone()).or_default().insert(entity.id.clone());
+                groups
+                    .entry(key.clone())
+                    .or_default()
+                    .insert(entity.id.clone());
                 keys.push(Some(key));
             }
             Ok(None) => {
@@ -813,14 +820,11 @@ pub(crate) fn select_chain_coherent_scored(
     let Some(winner_key) = groups
         .iter()
         .max_by(|(left_key, left_ids), (right_key, right_ids)| {
-            left_ids
-                .len()
-                .cmp(&right_ids.len())
-                .then_with(|| {
-                    first_indices
-                        .get(*right_key)
-                        .cmp(&first_indices.get(*left_key))
-                })
+            left_ids.len().cmp(&right_ids.len()).then_with(|| {
+                first_indices
+                    .get(*right_key)
+                    .cmp(&first_indices.get(*left_key))
+            })
         })
         .map(|(key, _)| key.clone())
     else {
@@ -1164,8 +1168,8 @@ fn verbatim_item(
             .unwrap_or_else(|| "hash_mismatch".to_string())
     })?;
     let source_groups = vec![recovered.source_group.id()];
-    let chain_identity = entity_chain_identity(&governed.entity)?
-        .with_source_group(source_groups[0].clone())?;
+    let chain_identity =
+        entity_chain_identity(&governed.entity)?.with_source_group(source_groups[0].clone())?;
     Ok(EvidenceItem {
         lane: EvidenceLane::Verbatim,
         entity_id: Some(governed.entity.id.clone()),
@@ -1188,8 +1192,8 @@ fn verbatim_item(
 }
 
 fn entity_chain_identity(entity: &Entity) -> Result<SourceChainIdentity, String> {
-    let body: serde_json::Value = serde_json::from_str(&entity.body_json)
-        .map_err(|_| "malformed_reference".to_string())?;
+    let body: serde_json::Value =
+        serde_json::from_str(&entity.body_json).map_err(|_| "malformed_reference".to_string())?;
     SourceChainIdentity::from_entity_body(&body).map_err(|_| "malformed_reference".to_string())
 }
 
@@ -1889,7 +1893,10 @@ mod tests {
             "one source group must not be emitted twice across the lane union"
         );
         assert_eq!(projection.items[0].lane, EvidenceLane::Derived);
-        assert_eq!(projection.items[0].chain_identity.chain_id.as_deref(), Some("chain-a"));
+        assert_eq!(
+            projection.items[0].chain_identity.chain_id.as_deref(),
+            Some("chain-a")
+        );
         assert_eq!(projection.items[0].chain_identity.status, "known");
         assert!(
             projection
@@ -2340,10 +2347,17 @@ mod tests {
         };
         let a = make("a", "chain-a");
         let b = make("b", "chain-b");
-        let (selected_ab, _) = select_chain_coherent_scored(vec![(a.clone(), 1.0), (b.clone(), 1.0)]);
+        let (selected_ab, _) =
+            select_chain_coherent_scored(vec![(a.clone(), 1.0), (b.clone(), 1.0)]);
         let (selected_ba, _) = select_chain_coherent_scored(vec![(b, 1.0), (a, 1.0)]);
-        let ids_ab = selected_ab.into_iter().map(|(entity, _)| entity.id).collect::<Vec<_>>();
-        let ids_ba = selected_ba.into_iter().map(|(entity, _)| entity.id).collect::<Vec<_>>();
+        let ids_ab = selected_ab
+            .into_iter()
+            .map(|(entity, _)| entity.id)
+            .collect::<Vec<_>>();
+        let ids_ba = selected_ba
+            .into_iter()
+            .map(|(entity, _)| entity.id)
+            .collect::<Vec<_>>();
         assert_eq!(ids_ab, vec!["a"]);
         assert_eq!(ids_ba, vec!["b"]);
     }
@@ -2362,10 +2376,8 @@ mod tests {
                 .to_string(),
             )
         };
-        let (selected, _) = select_chain_coherent_scored(vec![
-            (make("z-ranked"), 1.0),
-            (make("a-ranked"), 1.0),
-        ]);
+        let (selected, _) =
+            select_chain_coherent_scored(vec![(make("z-ranked"), 1.0), (make("a-ranked"), 1.0)]);
         assert_eq!(
             selected
                 .into_iter()
@@ -2391,7 +2403,10 @@ mod tests {
         };
         let selected = select_chain_coherent_entities(vec![make("z-ranked"), make("a-ranked")]).0;
         assert_eq!(
-            selected.into_iter().map(|entity| entity.id).collect::<Vec<_>>(),
+            selected
+                .into_iter()
+                .map(|entity| entity.id)
+                .collect::<Vec<_>>(),
             vec!["z-ranked", "a-ranked"]
         );
     }
@@ -2463,10 +2478,17 @@ mod tests {
             make("chain-a-2", Some("chain-a")),
         ]);
         assert_eq!(
-            selected.into_iter().map(|entity| entity.id).collect::<Vec<_>>(),
+            selected
+                .into_iter()
+                .map(|entity| entity.id)
+                .collect::<Vec<_>>(),
             vec!["chain-a-1", "chain-a-2"]
         );
-        assert!(excluded.iter().any(|entry| entry.reason == "unknown_chain_identity"));
-        assert!(excluded.iter().any(|entry| entry.reason == "incompatible_chain"));
+        assert!(excluded
+            .iter()
+            .any(|entry| entry.reason == "unknown_chain_identity"));
+        assert!(excluded
+            .iter()
+            .any(|entry| entry.reason == "incompatible_chain"));
     }
 }

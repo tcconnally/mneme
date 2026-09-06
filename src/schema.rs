@@ -2125,10 +2125,6 @@ fn apply_migrations(conn: &Connection) -> Result<(), Box<dyn std::error::Error>>
     )?;
     // ── end v53 ──────────────────────────────────────────────────────────
 
-
-
-
-
     // ── v54 (#1066 model-upgrade inheritance receipts) ──────────────────
     // Identity/vessel split (arXiv:2603.04740): a subject identity survives
     // model changes; incarnations record which model instance served it and
@@ -2545,7 +2541,7 @@ fn apply_migrations(conn: &Connection) -> Result<(), Box<dyn std::error::Error>>
     // bounded metadata, IDs, and digests; entity bodies and prompts remain in
     // their canonical stores and are re-read through governed readers.
     conn.execute_batch(
-       "CREATE TABLE IF NOT EXISTS task_state_projections (
+        "CREATE TABLE IF NOT EXISTS task_state_projections (
            task_id TEXT NOT NULL,
            tenant_id TEXT NOT NULL,
            workspace_hash TEXT NOT NULL,
@@ -2738,13 +2734,8 @@ fn migrate_from_v0_1_with_fts(
     let total = old_memories.len() as i64;
     let mut base_key_counts = std::collections::HashMap::<(String, String), usize>::new();
     for row in &old_memories {
-        let base = format!(
-            "migrated-{}",
-            truncate_at_char_boundary(&row.0, 20)
-        );
-        *base_key_counts
-            .entry((row.11.clone(), base))
-            .or_insert(0) += 1;
+        let base = format!("migrated-{}", truncate_at_char_boundary(&row.0, 20));
+        *base_key_counts.entry((row.11.clone(), base)).or_insert(0) += 1;
     }
 
     let mut created = 0i64;
@@ -2789,10 +2780,7 @@ fn migrate_from_v0_1_with_fts(
         let tags_json = serde_json::to_string(&tags_value)?;
 
         let category = "general".to_string();
-        let base_key = format!(
-            "migrated-{}",
-            truncate_at_char_boundary(&id, 20)
-        );
+        let base_key = format!("migrated-{}", truncate_at_char_boundary(&id, 20));
         let key = migration_key_for_id(
             &base_key,
             &id,
@@ -4272,7 +4260,11 @@ mod tests {
                 .expect("index lookup");
             assert_eq!(count, 1, "missing v59 index {index}");
         }
-        assert_eq!(conn.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0)).unwrap(), SCHEMA_VERSION);
+        assert_eq!(
+            conn.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            SCHEMA_VERSION
+        );
         let _ = std::fs::remove_file(&path);
     }
 
@@ -4339,8 +4331,15 @@ mod tests {
             .unwrap()
             .map(|row| row.unwrap())
             .collect();
-        assert_eq!(rows.len(), 2, "truncated ids must not overwrite one another");
-        assert_ne!(rows[0].1, rows[1].1, "generated migration keys must be unique");
+        assert_eq!(
+            rows.len(),
+            2,
+            "truncated ids must not overwrite one another"
+        );
+        assert_ne!(
+            rows[0].1, rows[1].1,
+            "generated migration keys must be unique"
+        );
 
         let _ = std::fs::remove_file(&source_path);
         let _ = std::fs::remove_file(&target_path);

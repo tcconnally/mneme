@@ -148,7 +148,11 @@ pub fn parse_observation(body_json: &str, fallback_updated_at: i64) -> Option<Ob
     let source_ids: Vec<String> = obj
         .get("source_ids")
         .and_then(|s| s.as_array())
-        .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
     let quotes: Vec<QuoteRef> = obj
         .get("quotes")
@@ -320,7 +324,10 @@ mod tests {
 
     #[test]
     fn quote_uses_note_verbatim_and_caps() {
-        assert_eq!(quote_for(r#"{"note": "stack uses react"}"#, 512), "stack uses react");
+        assert_eq!(
+            quote_for(r#"{"note": "stack uses react"}"#, 512),
+            "stack uses react"
+        );
         let long = format!("{}", "x".repeat(600));
         let q = quote_for(&format!(r#"{{"note": "{long}"}}"#), 512);
         assert_eq!(q.chars().count(), 513); // 512 + ellipsis
@@ -357,7 +364,10 @@ mod tests {
         let meta = ObservationMeta {
             summary: "s".to_string(),
             source_ids: vec!["m1".to_string()],
-            quotes: vec![QuoteRef { source_id: "m1".to_string(), quote: "q".to_string() }],
+            quotes: vec![QuoteRef {
+                source_id: "m1".to_string(),
+                quote: "q".to_string(),
+            }],
             proof_count: 1,
             merged_from_category: "tech".to_string(),
             updated_at_unix_ms: NOW,
@@ -378,21 +388,36 @@ mod tests {
     fn classify_fold_contradiction_unrelated() {
         // Near-duplicate → fold.
         assert_eq!(
-            classify("stack uses react", r#"{"note": "stack uses react with hooks"}"#, 0.5),
+            classify(
+                "stack uses react",
+                r#"{"note": "stack uses react with hooks"}"#,
+                0.5
+            ),
             MatchClass::Fold
         );
         // Same topic, revised claim → contradiction.
         assert_eq!(
-            classify("stack uses react", r#"{"note": "stack switched to vue"}"#, 0.5),
+            classify(
+                "stack uses react",
+                r#"{"note": "stack switched to vue"}"#,
+                0.5
+            ),
             MatchClass::Contradiction
         );
         // Unrelated topic → no shared trigrams.
         assert_eq!(
-            classify("stack uses react", r#"{"note": "the weather is sunny today in berlin"}"#, 0.5),
+            classify(
+                "stack uses react",
+                r#"{"note": "the weather is sunny today in berlin"}"#,
+                0.5
+            ),
             MatchClass::Unrelated
         );
         // Exact duplicate body → fold (identical trigram sets).
-        assert_eq!(classify("stack uses react", "stack uses react", 0.5), MatchClass::Fold);
+        assert_eq!(
+            classify("stack uses react", "stack uses react", 0.5),
+            MatchClass::Fold
+        );
     }
 
     #[test]
@@ -409,7 +434,10 @@ mod tests {
         };
         let out = refine(
             &existing,
-            &[("m2".to_string(), r#"{"note": "stack uses react with hooks"}"#.to_string())],
+            &[(
+                "m2".to_string(),
+                r#"{"note": "stack uses react with hooks"}"#.to_string(),
+            )],
             NOW,
             0.5,
             512,
@@ -418,7 +446,10 @@ mod tests {
         assert_eq!(out.source_ids, vec!["m1".to_string(), "m2".to_string()]);
         assert_eq!(out.updated_at_unix_ms, NOW);
         assert!(!out.stale, "folded evidence clears staleness");
-        assert!(out.history.is_empty(), "fold must not create a journey entry");
+        assert!(
+            out.history.is_empty(),
+            "fold must not create a journey entry"
+        );
         assert_eq!(out.summary, "stack uses react");
         assert_eq!(out.quotes[0].source_id, "m2");
         assert_eq!(out.quotes[0].quote, "stack uses react with hooks");
@@ -438,7 +469,10 @@ mod tests {
         };
         let out = refine(
             &existing,
-            &[("m2".to_string(), r#"{"note": "stack switched to vue"}"#.to_string())],
+            &[(
+                "m2".to_string(),
+                r#"{"note": "stack switched to vue"}"#.to_string(),
+            )],
             NOW,
             0.5,
             512,
@@ -462,7 +496,10 @@ mod tests {
         let existing = ObservationMeta {
             summary: "s".to_string(),
             source_ids: vec!["m1".to_string()],
-            quotes: vec![QuoteRef { source_id: "m1".to_string(), quote: "s".to_string() }],
+            quotes: vec![QuoteRef {
+                source_id: "m1".to_string(),
+                quote: "s".to_string(),
+            }],
             proof_count: 1,
             merged_from_category: "tech".to_string(),
             updated_at_unix_ms: NOW,
@@ -494,7 +531,10 @@ mod tests {
         };
         let out = refine(
             &existing,
-            &[("m9".to_string(), r#"{"note": "the weather is sunny in berlin"}"#.to_string())],
+            &[(
+                "m9".to_string(),
+                r#"{"note": "the weather is sunny in berlin"}"#.to_string(),
+            )],
             NOW,
             0.5,
             512,
@@ -504,12 +544,19 @@ mod tests {
         assert_eq!(out.source_ids, vec!["m1".to_string()]);
         assert_eq!(out.proof_count, 1);
         assert_eq!(out.updated_at_unix_ms, NOW - 1000);
-        assert!(out.stale, "unrelated newer facts keep the observation stale");
+        assert!(
+            out.stale,
+            "unrelated newer facts keep the observation stale"
+        );
     }
 
     impl ObservationMeta {
         fn changed_at_unix_ms(&self) -> i64 {
-            self.history.iter().map(|h| h.changed_at_unix_ms).max().unwrap_or(0)
+            self.history
+                .iter()
+                .map(|h| h.changed_at_unix_ms)
+                .max()
+                .unwrap_or(0)
         }
     }
 }

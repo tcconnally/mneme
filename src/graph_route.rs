@@ -86,29 +86,90 @@ impl GraphRoute {
 /// Strong connectors: dependency/lineage/impact verbs that almost always mark
 /// a graph question ("what depends on X", "what supports Y", "lineage of Z").
 const STRONG_CONNECTORS: &[&str] = &[
-    "depends", "dependency", "dependencies", "dependent", "dependents",
-    "depended", "support", "supports", "supported", "supporting",
-    "blocked", "blocks", "blocking", "caused", "causes", "cause of",
-    "derived", "derives", "derivation", "lineage", "impact", "impacts",
-    "because of", "follows", "follow from", "follows from", "implements",
-    "implemented", "references", "referenced", "supersedes", "superseded by",
+    "depends",
+    "dependency",
+    "dependencies",
+    "dependent",
+    "dependents",
+    "depended",
+    "support",
+    "supports",
+    "supported",
+    "supporting",
+    "blocked",
+    "blocks",
+    "blocking",
+    "caused",
+    "causes",
+    "cause of",
+    "derived",
+    "derives",
+    "derivation",
+    "lineage",
+    "impact",
+    "impacts",
+    "because of",
+    "follows",
+    "follow from",
+    "follows from",
+    "implements",
+    "implemented",
+    "references",
+    "referenced",
+    "supersedes",
+    "superseded by",
 ];
 
 /// Weak connectors: relational words that mark a graph question only when
 /// combined with entity anchors or other signals.
 const WEAK_CONNECTORS: &[&str] = &[
-    "related", "relates", "relationship", "relationships", "connected",
-    "connects", "connection", "connections", "linking", "links", "linked",
-    "link between", "between", "through", "path", "paths", "chain", "chains",
-    "network", "networks", "ties", "tied", "association", "associations",
-    "changed", "change", "influences", "influenced", "affects", "affected",
-    "drives", "driven",
+    "related",
+    "relates",
+    "relationship",
+    "relationships",
+    "connected",
+    "connects",
+    "connection",
+    "connections",
+    "linking",
+    "links",
+    "linked",
+    "link between",
+    "between",
+    "through",
+    "path",
+    "paths",
+    "chain",
+    "chains",
+    "network",
+    "networks",
+    "ties",
+    "tied",
+    "association",
+    "associations",
+    "changed",
+    "change",
+    "influences",
+    "influenced",
+    "affects",
+    "affected",
+    "drives",
+    "driven",
 ];
 
 /// Global / overview question words.
 const GLOBAL_WORDS: &[&str] = &[
-    "overview", "everything", "whole", "landscape", "globally", "entire",
-    "structure of", "map of", "big picture", "summary of the", "all of",
+    "overview",
+    "everything",
+    "whole",
+    "landscape",
+    "globally",
+    "entire",
+    "structure of",
+    "map of",
+    "big picture",
+    "summary of the",
+    "all of",
 ];
 
 /// Contribution per signal (capped so no single signal saturates the score).
@@ -133,8 +194,14 @@ pub fn classify_graph_utility(query: &str) -> GraphRoute {
     }
 
     let lower = trimmed.to_lowercase();
-    let strong = STRONG_CONNECTORS.iter().filter(|w| lower.contains(**w)).count();
-    let weak = WEAK_CONNECTORS.iter().filter(|w| lower.contains(**w)).count();
+    let strong = STRONG_CONNECTORS
+        .iter()
+        .filter(|w| lower.contains(**w))
+        .count();
+    let weak = WEAK_CONNECTORS
+        .iter()
+        .filter(|w| lower.contains(**w))
+        .count();
     let global = GLOBAL_WORDS.iter().filter(|w| lower.contains(**w)).count() > 0;
     let temporal = RuleBasedExtractor::has_temporal_marker(&lower);
     let entity_tokens = count_entity_tokens(trimmed);
@@ -202,7 +269,9 @@ pub(crate) fn count_entity_tokens(query: &str) -> usize {
             }
         }
     }
-    for tok in query.split(|c: char| c.is_whitespace() || c == ',' || c == ';' || c == '(' || c == ')') {
+    for tok in
+        query.split(|c: char| c.is_whitespace() || c == ',' || c == ';' || c == '(' || c == ')')
+    {
         let tok = tok.trim();
         if tok.is_empty() {
             continue;
@@ -221,7 +290,10 @@ pub(crate) fn count_entity_tokens(query: &str) -> usize {
             count += 1;
             continue;
         }
-        let all_upper = tok.chars().filter(|c| c.is_alphabetic()).all(|c| c.is_uppercase());
+        let all_upper = tok
+            .chars()
+            .filter(|c| c.is_alphabetic())
+            .all(|c| c.is_uppercase());
         if all_upper && letters >= 2 {
             count += 1; // acronyms: PR, AWS, LEDGER
             continue;
@@ -288,18 +360,21 @@ mod tests {
             route("what depends on the stripe_events replay job"),
             (0.55, "multi_hop")
         );
-        assert!(selected_default("what depends on the stripe_events replay job"));
+        assert!(selected_default(
+            "what depends on the stripe_events replay job"
+        ));
         assert_eq!(
             route("how is Alpha related to Beta through Gamma"),
             (1.0, "multi_hop")
         );
-        assert!(selected_default("how is Alpha related to Beta through Gamma"));
-        assert_eq!(
-            route("what changed because of PR 176"),
-            (1.0, "multi_hop")
-        );
+        assert!(selected_default(
+            "how is Alpha related to Beta through Gamma"
+        ));
+        assert_eq!(route("what changed because of PR 176"), (1.0, "multi_hop"));
         assert!(selected_default("what changed because of PR 176"));
-        assert!(selected_default("what supports the claim that deploy windows drop webhooks"));
+        assert!(selected_default(
+            "what supports the claim that deploy windows drop webhooks"
+        ));
         assert!(selected_default("lineage of the ledger receipt chain"));
         // One weak connector + two named entities is still a multi-hop shape.
         let r = classify_graph_utility("Alpha relates to Beta");
@@ -309,7 +384,9 @@ mod tests {
 
     #[test]
     fn global_overview_questions_select_graph() {
-        assert!(selected_default("overview of everything and how it connects"));
+        assert!(selected_default(
+            "overview of everything and how it connects"
+        ));
         let r = classify_graph_utility("overview of everything and how it connects");
         assert_eq!(r.reason, GraphRouteReason::Global);
         assert!(selected_default("map of the whole service landscape"));
@@ -330,7 +407,10 @@ mod tests {
         let r = classify_graph_utility("what shipped on 2026-06-20");
         assert_eq!(r.reason, GraphRouteReason::Temporal);
         assert!(!r.selected(DEFAULT_GRAPH_UTILITY_THRESHOLD));
-        assert_eq!(classify_graph_utility("deployed the worker tier on tuesday").reason, GraphRouteReason::Temporal);
+        assert_eq!(
+            classify_graph_utility("deployed the worker tier on tuesday").reason,
+            GraphRouteReason::Temporal
+        );
     }
 
     #[test]
@@ -346,15 +426,27 @@ mod tests {
         assert_eq!(r.reason, GraphRouteReason::EntityCentric);
         // 1 entity + 2 content words = 0.2 + 0.3 = 0.5 → engages at default.
         assert!(r.selected(DEFAULT_GRAPH_UTILITY_THRESHOLD));
-        assert_eq!(classify_graph_utility("what about AWS us-east-1").reason, GraphRouteReason::EntityCentric);
+        assert_eq!(
+            classify_graph_utility("what about AWS us-east-1").reason,
+            GraphRouteReason::EntityCentric
+        );
     }
 
     #[test]
     fn empty_and_garbage_queries_are_no_signal() {
-        assert_eq!(classify_graph_utility("").reason, GraphRouteReason::NoSignal);
-        assert_eq!(classify_graph_utility("   ").reason, GraphRouteReason::NoSignal);
+        assert_eq!(
+            classify_graph_utility("").reason,
+            GraphRouteReason::NoSignal
+        );
+        assert_eq!(
+            classify_graph_utility("   ").reason,
+            GraphRouteReason::NoSignal
+        );
         assert!(!selected_default(""));
-        assert_eq!(classify_graph_utility("a the of").reason, GraphRouteReason::NoSignal);
+        assert_eq!(
+            classify_graph_utility("a the of").reason,
+            GraphRouteReason::NoSignal
+        );
     }
 
     #[test]

@@ -529,11 +529,11 @@ pub fn replay_membership(
         }
     }
     ordered.sort_by_key(|(order, _, _)| *order);
-    let ordered_source_ids = ordered
-        .iter()
-        .map(|(_, id, _)| id.clone())
+    let ordered_source_ids = ordered.iter().map(|(_, id, _)| id.clone()).collect();
+    let source_chain_commitments = ordered
+        .into_iter()
+        .map(|(_, _, commitment)| commitment)
         .collect();
-    let source_chain_commitments = ordered.into_iter().map(|(_, _, commitment)| commitment).collect();
     Ok(ReplayMembershipResult {
         ordered_source_ids,
         source_chain_commitments,

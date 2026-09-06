@@ -34,7 +34,12 @@ pub fn host_is_loopback(host: &str) -> bool {
 /// (#868) without pulling in a date library.
 pub fn parse_iso8601_ms(s: &str) -> Option<i64> {
     let b = s.as_bytes();
-    if b.len() < 20 || b[4] != b'-' || b[7] != b'-' || b[10] != b'T' || b[13] != b':' || b[16] != b':'
+    if b.len() < 20
+        || b[4] != b'-'
+        || b[7] != b'-'
+        || b[10] != b'T'
+        || b[13] != b':'
+        || b[16] != b':'
     {
         return None;
     }
@@ -51,7 +56,11 @@ pub fn parse_iso8601_ms(s: &str) -> Option<i64> {
     let hour = num(11..13)?;
     let minute = num(14..16)?;
     let second = num(17..19)?;
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) || hour > 23 || minute > 59 || second > 60
+    if !(1..=12).contains(&month)
+        || !(1..=31).contains(&day)
+        || hour > 23
+        || minute > 59
+        || second > 60
     {
         return None;
     }
@@ -186,7 +195,10 @@ mod tests {
         assert_eq!(parse_iso8601_ms(&format_iso8601(fixed)), Some(fixed * 1000));
         // Fractional seconds.
         let base = parse_iso8601_ms("2026-08-09T12:00:00Z").unwrap();
-        assert_eq!(parse_iso8601_ms("2026-08-09T12:00:00.500Z"), Some(base + 500));
+        assert_eq!(
+            parse_iso8601_ms("2026-08-09T12:00:00.500Z"),
+            Some(base + 500)
+        );
         // Numeric UTC offsets normalize to the same instant.
         assert_eq!(parse_iso8601_ms("2026-08-09T08:00:00-04:00"), Some(base));
         assert_eq!(parse_iso8601_ms("2026-08-09T13:00:00+01:00"), Some(base));

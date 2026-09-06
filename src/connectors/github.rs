@@ -91,7 +91,10 @@ impl GitHubConnector {
                     .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
             });
         if !repo_ok {
-            return Err(format!("invalid GitHub repo (expected owner/name): {:?}", repo));
+            return Err(format!(
+                "invalid GitHub repo (expected owner/name): {:?}",
+                repo
+            ));
         }
         let url = format!(
             "https://api.github.com/repos/{}/issues?state=all&since={}&per_page=100&sort=updated&direction=desc",

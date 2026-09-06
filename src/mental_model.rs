@@ -140,11 +140,7 @@ impl MentalModelMeta {
     /// Full staleness decision given the optional newest-fact evidence from
     /// the DB (`newer_fact_key` = the newest raw fact in scope created after
     /// curation and not already a source; None = no such fact).
-    pub fn staleness(
-        &self,
-        now_ms: i64,
-        newer_fact_key: Option<&str>,
-    ) -> (bool, String) {
+    pub fn staleness(&self, now_ms: i64, newer_fact_key: Option<&str>) -> (bool, String) {
         let mut reasons = self.stale_reasons_pure(now_ms);
         if let Some(k) = newer_fact_key {
             reasons.push(format!("newer_facts:{k}"));
@@ -177,11 +173,7 @@ pub fn parse_mental_model(body: &str) -> Option<MentalModelMeta> {
             })
             .unwrap_or_default()
     };
-    let num = |k: &str| -> i64 {
-        obj.get(k)
-            .and_then(|x| x.as_i64())
-            .unwrap_or_default()
-    };
+    let num = |k: &str| -> i64 { obj.get(k).and_then(|x| x.as_i64()).unwrap_or_default() };
     let interval = num("review_interval_days");
     Some(MentalModelMeta {
         summary: summary.to_string(),
@@ -272,7 +264,9 @@ pub fn validate_curation(
         }
     }
     if source_ids.len() > SOURCE_IDS_MAX {
-        return Some(format!("source_ids must have at most {SOURCE_IDS_MAX} entries"));
+        return Some(format!(
+            "source_ids must have at most {SOURCE_IDS_MAX} entries"
+        ));
     }
     None
 }
@@ -407,8 +401,10 @@ mod tests {
         let many_sources: Vec<String> = (0..300).map(|i| format!("src-{i}")).collect();
         assert!(validate_curation("k", "s", 30, &[], &many_sources).is_some());
         assert!(validate_curation("k", "s", 30, &[], &[]).is_none());
-        assert!(validate_curation("k", "s", 1, &["stack".to_string()], &["mem-1".to_string()])
-            .is_none());
+        assert!(
+            validate_curation("k", "s", 1, &["stack".to_string()], &["mem-1".to_string()])
+                .is_none()
+        );
     }
 
     #[test]

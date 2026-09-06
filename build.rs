@@ -67,7 +67,10 @@ fn git_describe_hash() -> Option<String> {
         .output()
         .ok()?;
     if output.status.success() {
-        return String::from_utf8_lossy(&output.stdout).trim().to_string().into();
+        return String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .to_string()
+            .into();
     }
     None
 }
@@ -93,8 +96,7 @@ fn fetch_model_assets(out_dir: &str) {
     let tokenizer_url = format!(
         "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/{REV}/tokenizer.json"
     );
-    const MODEL_SHA256: &str =
-        "4278337fd0ff3c68bfb6291042cad8ab363e1d9fbc43dcb499fe91c871902474";
+    const MODEL_SHA256: &str = "4278337fd0ff3c68bfb6291042cad8ab363e1d9fbc43dcb499fe91c871902474";
     const TOKENIZER_SHA256: &str =
         "be50c3628f2bf5bb5e3a7f17b1f74611b2561a3a27eeab05e5aa30f411572037";
 
@@ -148,8 +150,7 @@ fn ensure_asset(url: &str, dest: &str, expected_sha256: &str) {
     );
     let tmp = format!("{dest}.tmp");
     std::fs::write(&tmp, &buf).unwrap_or_else(|e| panic!("build.rs: cannot write {tmp}: {e}"));
-    std::fs::rename(&tmp, dest)
-        .unwrap_or_else(|e| panic!("build.rs: cannot finalize {dest}: {e}"));
+    std::fs::rename(&tmp, dest).unwrap_or_else(|e| panic!("build.rs: cannot finalize {dest}: {e}"));
 }
 
 #[allow(dead_code)]

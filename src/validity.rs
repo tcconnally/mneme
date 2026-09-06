@@ -198,7 +198,7 @@ mod tests {
     fn fresh_exact_verified_is_valid_and_boosted() {
         let info = score(
             NOW,
-            NOW - 60_000,               // one minute old
+            NOW - 60_000, // one minute old
             None,
             "ws-a",
             Some("ws-a"),
@@ -209,7 +209,10 @@ mod tests {
         assert_eq!(info.grade, "valid");
         assert!((info.freshness - 1.0).abs() < 0.01);
         assert_eq!(info.scope_match, "exact");
-        assert!(info.multiplier > 1.0, "exact-scope + verified boost multiplier");
+        assert!(
+            info.multiplier > 1.0,
+            "exact-scope + verified boost multiplier"
+        );
         assert!(info.signals.iter().any(|s| s == "scope:exact"));
         assert!(info.signals.iter().any(|s| s == "provenance:verified"));
     }
@@ -294,8 +297,8 @@ mod tests {
         assert!(info.expiring_soon);
         // freshness for a 1-minute-old memory is ~0.99998 (not exactly 1),
         // so tolerance-based: penalty * scope * provenance, near-exact.
-        let expected = base().expiring_penalty * (1.0 + base().scope_bonus)
-            * (1.0 + base().provenance_boost);
+        let expected =
+            base().expiring_penalty * (1.0 + base().scope_bonus) * (1.0 + base().provenance_boost);
         assert!(
             (info.multiplier - expected).abs() < 0.01,
             "multiplier {} vs expected {expected}",

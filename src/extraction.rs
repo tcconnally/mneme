@@ -57,38 +57,113 @@ impl Extractor for NoopExtractor {
 pub struct RuleBasedExtractor;
 
 const PREFERENCE_CUES: &[&str] = &[
-    "i prefer", "i like", "i love", "i hate", "i dislike", "i want", "i'd rather",
-    "i would rather", "my favorite", "my favourite", "we prefer", "prefer to use",
+    "i prefer",
+    "i like",
+    "i love",
+    "i hate",
+    "i dislike",
+    "i want",
+    "i'd rather",
+    "i would rather",
+    "my favorite",
+    "my favourite",
+    "we prefer",
+    "prefer to use",
 ];
 
 // First-person experiential actions (past or habitual) → episodes.
 const EPISODE_CUES: &[&str] = &[
-    "i did", "i went", "i met", "i built", "i wrote", "i fixed", "i shipped",
-    "i deployed", "i decided", "i finished", "i completed", "i added", "i removed",
-    "we did", "we met", "we built", "we shipped", "we deployed", "we decided",
-    "we added", "we fixed", "we migrated", "we launched",
+    "i did",
+    "i went",
+    "i met",
+    "i built",
+    "i wrote",
+    "i fixed",
+    "i shipped",
+    "i deployed",
+    "i decided",
+    "i finished",
+    "i completed",
+    "i added",
+    "i removed",
+    "we did",
+    "we met",
+    "we built",
+    "we shipped",
+    "we deployed",
+    "we decided",
+    "we added",
+    "we fixed",
+    "we migrated",
+    "we launched",
 ];
 
 const MONTHS: &[&str] = &[
-    "january", "february", "march", "april", "may", "june", "july", "august",
-    "september", "october", "november", "december",
-    "jan ", "feb ", "mar ", "apr ", "jun ", "jul ", "aug ", "sep ", "sept ",
-    "oct ", "nov ", "dec ",
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+    "jan ",
+    "feb ",
+    "mar ",
+    "apr ",
+    "jun ",
+    "jul ",
+    "aug ",
+    "sep ",
+    "sept ",
+    "oct ",
+    "nov ",
+    "dec ",
 ];
 
 const WEEKDAYS: &[&str] = &[
-    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
 ];
 
 const RELATIVE_TIME: &[&str] = &[
-    "yesterday", "today", "tomorrow", "last week", "last month", "last year",
-    "next week", "next month", "this morning", "this afternoon", "tonight",
+    "yesterday",
+    "today",
+    "tomorrow",
+    "last week",
+    "last month",
+    "last year",
+    "next week",
+    "next month",
+    "this morning",
+    "this afternoon",
+    "tonight",
 ];
 
 // Declarative copulas / relations that mark a factual statement.
 const FACT_MARKERS: &[&str] = &[
-    " is ", " are ", " was ", " were ", " has ", " have ", " uses ", " runs on ",
-    " consists of ", " supports ", " requires ", " depends on ", " stores ",
+    " is ",
+    " are ",
+    " was ",
+    " were ",
+    " has ",
+    " have ",
+    " uses ",
+    " runs on ",
+    " consists of ",
+    " supports ",
+    " requires ",
+    " depends on ",
+    " stores ",
 ];
 
 impl RuleBasedExtractor {
@@ -189,7 +264,10 @@ impl Extractor for RuleBasedExtractor {
         let mut out: Vec<ExtractedItem> = Vec::new();
         for sentence in split_sentences(text) {
             if let Some(kind) = Self::classify(&sentence) {
-                let item = ExtractedItem { kind, text: sentence };
+                let item = ExtractedItem {
+                    kind,
+                    text: sentence,
+                };
                 if !out.contains(&item) {
                     out.push(item);
                 }
@@ -241,7 +319,10 @@ mod tests {
     fn temporal_marker_takes_priority() {
         // A clock time and a weekday both mark temporal events.
         let items = RuleBasedExtractor.extract("The standup is at 09:30. We met on Tuesday.");
-        assert_eq!(kinds(&items), vec![ExtractKind::TemporalEvent, ExtractKind::TemporalEvent]);
+        assert_eq!(
+            kinds(&items),
+            vec![ExtractKind::TemporalEvent, ExtractKind::TemporalEvent]
+        );
     }
 
     #[test]
@@ -275,7 +356,11 @@ mod tests {
 
     #[test]
     fn extractor_for_unknown_is_noop() {
-        assert!(extractor_for("nope").extract("The db is Postgres.").is_empty());
-        assert!(!extractor_for("rule_based").extract("The db is Postgres.").is_empty());
+        assert!(extractor_for("nope")
+            .extract("The db is Postgres.")
+            .is_empty());
+        assert!(!extractor_for("rule_based")
+            .extract("The db is Postgres.")
+            .is_empty());
     }
 }

@@ -156,8 +156,16 @@ pub struct ActiveConflict {
 
 impl ActiveConflict {
     fn validate(&self, label: &str) -> Result<(), String> {
-        validate_text(&format!("{label}.conflict_id"), &self.conflict_id, MAX_ID_CHARS)?;
-        validate_text(&format!("{label}.reason"), &self.reason, MAX_SLOT_REASON_CHARS)?;
+        validate_text(
+            &format!("{label}.conflict_id"),
+            &self.conflict_id,
+            MAX_ID_CHARS,
+        )?;
+        validate_text(
+            &format!("{label}.reason"),
+            &self.reason,
+            MAX_SLOT_REASON_CHARS,
+        )?;
         if self.evidence_ids.is_empty() || self.evidence_ids.len() > MAX_EVIDENCE_REFS {
             return Err(format!(
                 "{label}.evidence_ids must contain between 1 and {MAX_EVIDENCE_REFS} IDs"
@@ -165,11 +173,7 @@ impl ActiveConflict {
         }
         let mut ids = BTreeSet::new();
         for (index, id) in self.evidence_ids.iter().enumerate() {
-            validate_text(
-                &format!("{label}.evidence_ids[{index}]"),
-                id,
-                MAX_ID_CHARS,
-            )?;
+            validate_text(&format!("{label}.evidence_ids[{index}]"), id, MAX_ID_CHARS)?;
             if !ids.insert(id) {
                 return Err(format!("{label}.evidence_ids contains duplicate ID '{id}'"));
             }
@@ -207,11 +211,7 @@ impl Default for NextStepMetadata {
 impl NextStepMetadata {
     fn validate(&self) -> Result<(), String> {
         validate_text("next_step.kind", &self.kind, MAX_ROUTE_CHARS)?;
-        validate_text(
-            "next_step.reason",
-            &self.reason,
-            MAX_NEXT_STEP_REASON_CHARS,
-        )
+        validate_text("next_step.reason", &self.reason, MAX_NEXT_STEP_REASON_CHARS)
     }
 }
 
@@ -270,7 +270,12 @@ impl TaskStateRequest {
         self.validate(query, requested_workspace, requester)
     }
 
-    fn validate(&self, query: &str, requested_workspace: Option<&str>, requester: &str) -> Result<(), String> {
+    fn validate(
+        &self,
+        query: &str,
+        requested_workspace: Option<&str>,
+        requester: &str,
+    ) -> Result<(), String> {
         if self.schema_version != TASK_STATE_SCHEMA_VERSION {
             return Err(format!(
                 "unsupported task-state schema_version '{}'; expected {}",
@@ -283,7 +288,9 @@ impl TaskStateRequest {
             return Err("task-state workspace scope does not match project_task scope".to_string());
         }
         if self.principal_id != requester || self.agent_id != requester {
-            return Err("task-state principal/agent scope does not match transport identity".to_string());
+            return Err(
+                "task-state principal/agent scope does not match transport identity".to_string(),
+            );
         }
         let expected_task_digest = sha256_hex(query);
         if self.task_digest != expected_task_digest {
@@ -321,7 +328,9 @@ impl TaskStateRequest {
         validate_slots("unresolved_evidence", &self.unresolved_evidence)?;
         validate_slots("missing_evidence", &self.missing_evidence)?;
         if self.active_conflicts.len() > MAX_CONFLICTS {
-            return Err(format!("active_conflicts may contain at most {MAX_CONFLICTS} entries"));
+            return Err(format!(
+                "active_conflicts may contain at most {MAX_CONFLICTS} entries"
+            ));
         }
         let mut conflict_ids = BTreeSet::new();
         for (index, conflict) in self.active_conflicts.iter().enumerate() {
@@ -456,7 +465,9 @@ impl TaskState {
         validate_slots("unresolved_evidence", &self.unresolved_evidence)?;
         validate_slots("missing_evidence", &self.missing_evidence)?;
         if self.active_conflicts.len() > MAX_CONFLICTS {
-            return Err(format!("active_conflicts may contain at most {MAX_CONFLICTS} entries"));
+            return Err(format!(
+                "active_conflicts may contain at most {MAX_CONFLICTS} entries"
+            ));
         }
         let mut conflict_ids = BTreeSet::new();
         for conflict in &self.active_conflicts {
@@ -567,29 +578,24 @@ pub fn serve_project_task(
     params.workspace_hash = Some(scope.workspace_hash.clone());
     params.enforce_utility_horizon = true;
     let query_embedding_available = matches!(params.mode, SearchMode::Fts5);
-    let (candidates, recall_outcome) = match db
-        .recall_for_requester(&params, Some(&scope.principal_id))
-    {
-        Ok(candidates) => {
-            let outcome = db.recall_outcome(
-                &params.mode,
-                query_embedding_available,
-                candidates.len(),
-                None,
-            );
-            (candidates, outcome)
-        }
-        Err(error) => {
-            let reason = error.to_string();
-            let outcome = db.recall_outcome(
-                &params.mode,
-                query_embedding_available,
-                0,
-                Some(&reason),
-            );
-            (Vec::new(), outcome)
-        }
-    };
+    let (candidates, recall_outcome) =
+        match db.recall_for_requester(&params, Some(&scope.principal_id)) {
+            Ok(candidates) => {
+                let outcome = db.recall_outcome(
+                    &params.mode,
+                    query_embedding_available,
+                    candidates.len(),
+                    None,
+                );
+                (candidates, outcome)
+            }
+            Err(error) => {
+                let reason = error.to_string();
+                let outcome =
+                    db.recall_outcome(&params.mode, query_embedding_available, 0, Some(&reason));
+                (Vec::new(), outcome)
+            }
+        };
 
     let auto_recall = request.accepted_evidence.is_empty() && request.rejected_evidence.is_empty();
     let accepted_input = if auto_recall {
@@ -677,7 +683,11 @@ pub fn serve_project_task(
     db.task_state_compare_and_swap(&state)?;
 
     sources.sort_by(|left, right| {
-        (&left.id, &left.source_id, &left.revision).cmp(&(&right.id, &right.source_id, &right.revision))
+        (&left.id, &left.source_id, &left.revision).cmp(&(
+            &right.id,
+            &right.source_id,
+            &right.revision,
+        ))
     });
     sources.dedup_by(|left, right| left.id == right.id && left.source_id == right.source_id);
     let fallback = match outcome {
@@ -850,7 +860,10 @@ fn validate_slots(label: &str, slots: &[EvidenceSlot]) -> Result<(), String> {
     for (index, slot) in slots.iter().enumerate() {
         slot.validate(&format!("{label}[{index}]"))?;
         if !ids.insert(&slot.slot_id) {
-            return Err(format!("{label} contains duplicate slot ID '{}'", slot.slot_id));
+            return Err(format!(
+                "{label} contains duplicate slot ID '{}'",
+                slot.slot_id
+            ));
         }
     }
     Ok(())
@@ -881,7 +894,10 @@ fn resolve_references(
             .get_entity_by_id_unfiltered(&reference.entity_id)
             .map_err(|error| format!("canonical evidence lookup failed: {error}"))?
         else {
-            return Err(format!("unknown evidence reference ID '{}'", reference.entity_id));
+            return Err(format!(
+                "unknown evidence reference ID '{}'",
+                reference.entity_id
+            ));
         };
         if raw.workspace_hash != scope.workspace_hash && !raw.workspace_hash.is_empty() {
             return Err(format!(
@@ -936,7 +952,9 @@ fn resolve_references(
         };
         let anchor = temporal_anchor_unix_ms.unwrap_or_else(crate::db::now_ms);
         if anchor < raw.created_at_unix_ms
-            || temporal_bounds.0.is_some_and(|valid_from| anchor < valid_from)
+            || temporal_bounds
+                .0
+                .is_some_and(|valid_from| anchor < valid_from)
             || temporal_bounds.1.is_some_and(|valid_to| anchor >= valid_to)
             || temporal_bounds
                 .2
@@ -1009,7 +1027,15 @@ fn resolve_provider_source(
     let conn = db
         .conn()
         .map_err(|error| format!("provider source lookup failed: {error}"))?;
-    let row: Option<(Option<String>, String, Option<String>, String, String, String, Option<i64>)> = conn
+    let row: Option<(
+        Option<String>,
+        String,
+        Option<String>,
+        String,
+        String,
+        String,
+        Option<i64>,
+    )> = conn
         .query_row(
             "SELECT entity_id, revision, content_sha256, workspace_hash, visibility,
                     state, deleted_at_unix_ms
@@ -1029,12 +1055,10 @@ fn resolve_provider_source(
         )
         .optional()
         .map_err(|error| format!("provider source lookup failed: {error}"))?;
-    let Some((entity_id, revision, content_sha256, workspace_hash, visibility, state, deleted_at)) = row
+    let Some((entity_id, revision, content_sha256, workspace_hash, visibility, state, deleted_at)) =
+        row
     else {
-        return Err(format!(
-            "unknown source identity '{}'",
-            reference.source_id
-        ));
+        return Err(format!("unknown source identity '{}'", reference.source_id));
     };
     if state != "active" || deleted_at.is_some() {
         return Err(format!(
@@ -1095,12 +1119,18 @@ fn resolve_provider_source(
 fn digest_sources(sources: &[CanonicalSource]) -> String {
     let mut values = sources.to_vec();
     values.sort_by(|left, right| {
-        (&left.id, &left.source_id, &left.revision, &left.source_digest).cmp(&(
-            &right.id,
-            &right.source_id,
-            &right.revision,
-            &right.source_digest,
-        ))
+        (
+            &left.id,
+            &left.source_id,
+            &left.revision,
+            &left.source_digest,
+        )
+            .cmp(&(
+                &right.id,
+                &right.source_id,
+                &right.revision,
+                &right.source_digest,
+            ))
     });
     domain_digest("perseus-vault/task-state-sources/v1", &values)
 }
@@ -1135,13 +1165,19 @@ fn validate_text(label: &str, value: &str, max_chars: usize) -> Result<(), Strin
         return Err(format!("{label} must be non-empty"));
     }
     if value.chars().count() > max_chars || !ensure_text_without_control(value) {
-        return Err(format!("{label} is invalid or exceeds {max_chars} characters"));
+        return Err(format!(
+            "{label} is invalid or exceeds {max_chars} characters"
+        ));
     }
     Ok(())
 }
 
 fn validate_sha256(label: &str, value: &str) -> Result<(), String> {
-    if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()) {
+    if value.len() != 64
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
         return Err(format!("{label} must be a lowercase SHA-256 digest"));
     }
     Ok(())
@@ -1262,7 +1298,10 @@ mod tests {
             Some("workspace-a"),
         )
         .expect_err("duplicate evidence IDs must be rejected");
-        assert!(error.contains("duplicate evidence reference"), "unexpected error: {error}");
+        assert!(
+            error.contains("duplicate evidence reference"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]
@@ -1280,7 +1319,10 @@ mod tests {
             Some("workspace-a"),
         )
         .expect_err("unknown evidence IDs must be rejected");
-        assert!(error.contains("unknown evidence reference"), "unexpected error: {error}");
+        assert!(
+            error.contains("unknown evidence reference"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]
@@ -1308,7 +1350,10 @@ mod tests {
             Some("workspace-a"),
         )
         .expect_err("cross-workspace evidence must be rejected");
-        assert!(error.contains("workspace scope mismatch"), "unexpected error: {error}");
+        assert!(
+            error.contains("workspace scope mismatch"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]
@@ -1338,7 +1383,10 @@ mod tests {
             Some("workspace-a"),
         )
         .expect_err("a forged source digest must be rejected");
-        assert!(error.contains("source digest mismatch"), "unexpected error: {error}");
+        assert!(
+            error.contains("source digest mismatch"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]
@@ -1440,17 +1488,41 @@ mod tests {
             Some("workspace-a"),
         )
         .expect_err("future evidence must not serve before valid_from");
-        assert!(error.contains("not valid at temporal anchor"), "unexpected error: {error}");
+        assert!(
+            error.contains("not valid at temporal anchor"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]
     fn task_state_maps_recall_statuses_to_explicit_outcomes() {
         let cases = [
             (RecallStatus::Fresh, 1, 0, 0, 0, TaskStateOutcome::Complete),
-            (RecallStatus::Partial, 1, 0, 0, 0, TaskStateOutcome::Degraded),
-            (RecallStatus::Timeout, 1, 0, 0, 0, TaskStateOutcome::Degraded),
+            (
+                RecallStatus::Partial,
+                1,
+                0,
+                0,
+                0,
+                TaskStateOutcome::Degraded,
+            ),
+            (
+                RecallStatus::Timeout,
+                1,
+                0,
+                0,
+                0,
+                TaskStateOutcome::Degraded,
+            ),
             (RecallStatus::Stale, 1, 0, 0, 0, TaskStateOutcome::Degraded),
-            (RecallStatus::Unavailable, 1, 0, 0, 0, TaskStateOutcome::Unavailable),
+            (
+                RecallStatus::Unavailable,
+                1,
+                0,
+                0,
+                0,
+                TaskStateOutcome::Unavailable,
+            ),
             (RecallStatus::Empty, 0, 0, 0, 1, TaskStateOutcome::Abstained),
         ];
         for (status, accepted, rejected, unresolved, missing, expected) in cases {
@@ -1459,14 +1531,7 @@ mod tests {
                 ..RecallOutcome::default()
             };
             assert_eq!(
-                derive_outcome(
-                    accepted,
-                    rejected,
-                    unresolved,
-                    0,
-                    missing,
-                    Some(&recall),
-                ),
+                derive_outcome(accepted, rejected, unresolved, 0, missing, Some(&recall),),
                 expected
             );
         }
@@ -1610,7 +1675,10 @@ mod tests {
         .unwrap();
         assert_eq!(response.outcome, TaskStateOutcome::Complete);
         assert_eq!(response.serving.canonical_sources.len(), 1);
-        assert_eq!(response.serving.canonical_sources[0].category, "preferences");
+        assert_eq!(
+            response.serving.canonical_sources[0].category,
+            "preferences"
+        );
     }
 
     #[test]
@@ -1711,11 +1779,26 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(first.task_state.scope.task_id, second.task_state.scope.task_id);
-        assert_ne!(first.task_state.scope.principal_id, second.task_state.scope.principal_id);
-        assert_ne!(first.task_state.state_digest, second.task_state.state_digest);
-        assert_eq!(db.task_state_get(&first.task_state.scope).unwrap(), Some(first.task_state));
-        assert_eq!(db.task_state_get(&second.task_state.scope).unwrap(), Some(second.task_state));
+        assert_eq!(
+            first.task_state.scope.task_id,
+            second.task_state.scope.task_id
+        );
+        assert_ne!(
+            first.task_state.scope.principal_id,
+            second.task_state.scope.principal_id
+        );
+        assert_ne!(
+            first.task_state.state_digest,
+            second.task_state.state_digest
+        );
+        assert_eq!(
+            db.task_state_get(&first.task_state.scope).unwrap(),
+            Some(first.task_state)
+        );
+        assert_eq!(
+            db.task_state_get(&second.task_state.scope).unwrap(),
+            Some(second.task_state)
+        );
     }
 
     #[test]
@@ -1753,7 +1836,10 @@ mod tests {
         }
         let error = rebuild_task_state(&db, &response.task_state.scope)
             .expect_err("rebuild must detect canonical source drift");
-        assert!(error.contains("source digest mismatch"), "unexpected error: {error}");
+        assert!(
+            error.contains("source digest mismatch"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]
@@ -1844,7 +1930,10 @@ mod tests {
         let error = db
             .task_state_compare_and_swap(&first)
             .expect_err("the same base sequence cannot be committed twice");
-        assert!(error.contains("stale base sequence"), "unexpected error: {error}");
+        assert!(
+            error.contains("stale base sequence"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]
@@ -1955,7 +2044,13 @@ mod tests {
         .unwrap();
         assert_eq!(second.task_state.state_sequence, 2);
         assert_eq!(second.task_state.base_sequence, 1);
-        assert_eq!(second.task_state.accepted_evidence, first.task_state.accepted_evidence);
-        assert_eq!(rebuild_task_state(&db, &second.task_state.scope).unwrap(), second.task_state);
+        assert_eq!(
+            second.task_state.accepted_evidence,
+            first.task_state.accepted_evidence
+        );
+        assert_eq!(
+            rebuild_task_state(&db, &second.task_state.scope).unwrap(),
+            second.task_state
+        );
     }
 }

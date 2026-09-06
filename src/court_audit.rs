@@ -37,7 +37,11 @@ pub fn source_authority_rank(source: &str) -> i64 {
 /// Pair fingerprint: sha256 over the two entity ids joined by '|', sorted.
 /// Order-independent so the same pair always maps to one ruling slot.
 pub fn pair_fingerprint(id_a: &str, id_b: &str) -> String {
-    let (first, second) = if id_a <= id_b { (id_a, id_b) } else { (id_b, id_a) };
+    let (first, second) = if id_a <= id_b {
+        (id_a, id_b)
+    } else {
+        (id_b, id_a)
+    };
     let digest = Sha256::digest(format!("{first}|{second}").as_bytes());
     format!("{digest:x}")
 }
@@ -162,25 +166,37 @@ mod tests {
     #[test]
     fn authority_decides_importance_ties() {
         // equal importance: curated beats agent regardless of recency
-        let r = recommend(&cand("old-curated", 0.5, "curated", 100), &cand("new-agent", 0.5, "agent", 999));
+        let r = recommend(
+            &cand("old-curated", 0.5, "curated", 100),
+            &cand("new-agent", 0.5, "agent", 999),
+        );
         assert_eq!(r.winner.id, "old-curated");
         assert_eq!(r.decided_by, "authority");
     }
 
     #[test]
     fn recency_decides_importance_and_authority_ties() {
-        let r = recommend(&cand("old", 0.5, "agent", 100), &cand("new", 0.5, "agent", 200));
+        let r = recommend(
+            &cand("old", 0.5, "agent", 100),
+            &cand("new", 0.5, "agent", 200),
+        );
         assert_eq!(r.winner.id, "new");
         assert_eq!(r.decided_by, "recency");
     }
 
     #[test]
     fn id_breaks_full_ties_deterministically() {
-        let r = recommend(&cand("mem-b", 0.5, "agent", 100), &cand("mem-a", 0.5, "agent", 100));
+        let r = recommend(
+            &cand("mem-b", 0.5, "agent", 100),
+            &cand("mem-a", 0.5, "agent", 100),
+        );
         assert_eq!(r.winner.id, "mem-a");
         assert_eq!(r.decided_by, "id");
         // and the reverse ordering still picks the same winner
-        let r2 = recommend(&cand("mem-a", 0.5, "agent", 100), &cand("mem-b", 0.5, "agent", 100));
+        let r2 = recommend(
+            &cand("mem-a", 0.5, "agent", 100),
+            &cand("mem-b", 0.5, "agent", 100),
+        );
         assert_eq!(r2.winner.id, "mem-a");
     }
 
@@ -189,6 +205,9 @@ mod tests {
         assert!(source_authority_rank("curated") > source_authority_rank("capture"));
         assert!(source_authority_rank("capture") > source_authority_rank("agent"));
         assert!(source_authority_rank("agent") > source_authority_rank("web_gap_fill"));
-        assert_eq!(source_authority_rank("unknown"), source_authority_rank("web_gap_fill"));
+        assert_eq!(
+            source_authority_rank("unknown"),
+            source_authority_rank("web_gap_fill")
+        );
     }
 }

@@ -20,26 +20,15 @@ use crate::db::Database;
 #[derive(Debug, Clone, PartialEq)]
 pub enum GateVerdict {
     /// Nothing triggered: store without an LLM pass.
-    Store {
-        note: &'static str,
-    },
+    Store { note: &'static str },
     /// Exact/near-exact content already present in (category, workspace).
-    Duplicate {
-        matched_id: String,
-    },
+    Duplicate { matched_id: String },
     /// Candidate is too vague to justify a write (importance floor).
-    Forget {
-        reason: String,
-    },
+    Forget { reason: String },
     /// Same (category, key) already exists — a deterministic supersede.
-    Supersede {
-        target_id: String,
-    },
+    Supersede { target_id: String },
     /// Near-duplicate with divergent content — the ONLY LLM-eligible path.
-    Adjudicate {
-        matched_id: String,
-        reason: String,
-    },
+    Adjudicate { matched_id: String, reason: String },
 }
 
 /// Near-exact match threshold: same content, maybe whitespace/format drift.

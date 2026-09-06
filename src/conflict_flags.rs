@@ -50,15 +50,7 @@ fn card_for(
     // internal loader only so their identity/validity/card digest can be
     // linked; claim text remains inside this process and is not returned.
     let card = if suppressed {
-        build_claim_card_for_conflict(
-            db,
-            id,
-            workspace_hash,
-            agent_id,
-            true,
-            false,
-            now,
-        )?
+        build_claim_card_for_conflict(db, id, workspace_hash, agent_id, true, false, now)?
     } else {
         build_claim_card(db, id, workspace_hash, agent_id, true, false, now)?
     };
@@ -101,11 +93,7 @@ fn workspace_compatible(
 fn high_confidence(card: &ClaimCard) -> bool {
     !card.state.archived
         && !card.state.quarantined
-        && (card.verified
-            || matches!(
-                card.epistemic_state.as_str(),
-                "verified" | "corroborated"
-            ))
+        && (card.verified || matches!(card.epistemic_state.as_str(), "verified" | "corroborated"))
 }
 
 fn flag_kind(candidate: &ClaimCard, claim: &ClaimCard) -> &'static str {
@@ -137,11 +125,7 @@ fn evidence_refs(candidate: &ClaimCard, claim: &ClaimCard) -> Value {
     ])
 }
 
-fn push_direction(
-    flags: &mut Vec<Value>,
-    candidate: &ClaimCard,
-    claim: &ClaimCard,
-) -> bool {
+fn push_direction(flags: &mut Vec<Value>, candidate: &ClaimCard, claim: &ClaimCard) -> bool {
     // A flag is useful only when its established side is claim-card high-grade.
     // A lower-grade retrieved candidate can still be marked against that fact;
     // a pair of unestablished drafts is not an abstention signal.
@@ -178,11 +162,11 @@ fn render_markdown(flags: &[Value]) -> String {
             .get("candidate_id")
             .and_then(Value::as_str)
             .unwrap_or("");
-        let claim = flag
-            .get("claim_id")
+        let claim = flag.get("claim_id").and_then(Value::as_str).unwrap_or("");
+        let kind = flag
+            .get("kind")
             .and_then(Value::as_str)
-            .unwrap_or("");
-        let kind = flag.get("kind").and_then(Value::as_str).unwrap_or("conflict");
+            .unwrap_or("conflict");
         let confidence = flag
             .get("confidence")
             .and_then(Value::as_str)

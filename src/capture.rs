@@ -252,8 +252,7 @@ fn looks_like_jsonl(payload: &str) -> bool {
 /// string among the conventional content fields, else the compact record
 /// itself (still classifiable — markers survive JSON encoding).
 fn jsonl_note_text(record: &serde_json::Map<String, serde_json::Value>) -> String {
-    const CONTENT_FIELDS: &[&str] =
-        &["content", "text", "insight", "lesson", "summary", "message"];
+    const CONTENT_FIELDS: &[&str] = &["content", "text", "insight", "lesson", "summary", "message"];
     for field in CONTENT_FIELDS {
         if let Some(serde_json::Value::String(s)) = record.get(*field) {
             let t = s.trim();
@@ -286,11 +285,7 @@ fn trimmed_span(payload: &str, start_char: usize, end_char: usize) -> Option<(St
     let raw = &payload[start_byte..end_byte];
     let raw_chars = raw.chars().count();
     let lead = raw.chars().take_while(|c| c.is_whitespace()).count();
-    let trail = raw
-        .chars()
-        .rev()
-        .take_while(|c| c.is_whitespace())
-        .count();
+    let trail = raw.chars().rev().take_while(|c| c.is_whitespace()).count();
     if lead + trail >= raw_chars {
         return None;
     }
@@ -529,7 +524,10 @@ If nothing is worth remembering, return: {{"notes": []}}"#,
 pub fn parse_llm_notes(raw: &str, max_notes: usize) -> Option<DistillReport> {
     let cap = max_notes.clamp(1, MAX_CAPTURE_NOTES);
     let mut text = raw.trim();
-    if let Some(stripped) = text.strip_prefix("```json").or_else(|| text.strip_prefix("```")) {
+    if let Some(stripped) = text
+        .strip_prefix("```json")
+        .or_else(|| text.strip_prefix("```"))
+    {
         text = stripped.trim_start();
     }
     if let Some(stripped) = text.strip_suffix("```") {
@@ -541,7 +539,10 @@ pub fn parse_llm_notes(raw: &str, max_notes: usize) -> Option<DistillReport> {
     let mut notes: Vec<CaptureNote> = Vec::new();
     for item in arr {
         let summary = clip_chars(
-            item.get("summary").and_then(|v| v.as_str()).unwrap_or("").trim(),
+            item.get("summary")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim(),
             MAX_SUMMARY_CHARS,
         );
         if summary.is_empty() {
@@ -753,13 +754,22 @@ mod tests {
             classify("The deploy failed; root cause was the unbumped schema version."),
             "root-cause"
         );
-        assert_eq!(classify("The migration failed on the FK constraint."), "pitfall");
-        assert_eq!(classify("We decided to ship the fallback path first."), "decision");
+        assert_eq!(
+            classify("The migration failed on the FK constraint."),
+            "pitfall"
+        );
+        assert_eq!(
+            classify("We decided to ship the fallback path first."),
+            "decision"
+        );
         assert_eq!(
             classify("Rule of thumb: run the smoke suite before every release."),
             "pattern"
         );
-        assert_eq!(classify("The vault holds about 1,300 entities now."), "takeaway");
+        assert_eq!(
+            classify("The vault holds about 1,300 entities now."),
+            "takeaway"
+        );
     }
 
     #[test]
@@ -790,9 +800,15 @@ mod tests {
     fn summary_and_key_are_stable_and_bounded() {
         let text = "## The Fix: bump SCHEMA_VERSION on every new ensure_column!\nDetails follow.";
         let summary = summary_line(text);
-        assert_eq!(summary, "The Fix: bump SCHEMA_VERSION on every new ensure_column!");
+        assert_eq!(
+            summary,
+            "The Fix: bump SCHEMA_VERSION on every new ensure_column!"
+        );
         let key = key_for(&summary);
-        assert_eq!(key, "the-fix-bump-schema-version-on-every-new-ensure-column");
+        assert_eq!(
+            key,
+            "the-fix-bump-schema-version-on-every-new-ensure-column"
+        );
         // Deterministic.
         assert_eq!(key, key_for(&summary_line(text)));
         // Bounded + ASCII even for long/unicode summaries.
@@ -854,9 +870,11 @@ mod tests {
         assert!(parse_llm_notes("I could not find any notes, sorry!", 20).is_none());
         assert!(parse_llm_notes("{\"lessons\": []}", 20).is_none());
         // Missing content falls back to the summary.
-        let report =
-            parse_llm_notes(r#"{"notes": [{"type": "takeaway", "summary": "Just this"}]}"#, 20)
-                .unwrap();
+        let report = parse_llm_notes(
+            r#"{"notes": [{"type": "takeaway", "summary": "Just this"}]}"#,
+            20,
+        )
+        .unwrap();
         assert_eq!(report.notes[0].content, "Just this");
     }
 
@@ -884,7 +902,9 @@ mod tests {
         // Capture the two dated blocks (as the distiller would).
         let notes = vec![
             note("### 2026-07-10\nThe deploy failed because the schema version was never bumped."),
-            note("### 2026-07-11\nDecided to standardize on the MSVC toolchain for Windows builds."),
+            note(
+                "### 2026-07-11\nDecided to standardize on the MSVC toolchain for Windows builds.",
+            ),
         ];
         let (pruned, removed) = prune_captured_regions(source, &notes);
         assert_eq!(removed, 2, "both captured blocks must be removed");
@@ -898,7 +918,9 @@ mod tests {
     #[test]
     fn prune_is_a_noop_when_nothing_matches() {
         let source = "# Header\nUncaptured content only.\n";
-        let notes = vec![note("Something entirely different that is not in the file at all.")];
+        let notes = vec![note(
+            "Something entirely different that is not in the file at all.",
+        )];
         let (pruned, removed) = prune_captured_regions(source, &notes);
         assert_eq!(removed, 0);
         assert_eq!(pruned, source, "no match => source is returned verbatim");
@@ -1002,10 +1024,48 @@ mod tests {
 
     #[test]
     fn span_text_rejects_out_of_bounds_and_empty() {
-        assert_eq!(span_text("short", CharSpan { start_char: 0, end_char: 99 }), None);
-        assert_eq!(span_text("short", CharSpan { start_char: 5, end_char: 3 }), None);
-        assert_eq!(span_text("short", CharSpan { start_char: 0, end_char: 0 }).unwrap(), "");
-        assert_eq!(span_text("short", CharSpan { start_char: 2, end_char: 5 }).unwrap(), "ort");
+        assert_eq!(
+            span_text(
+                "short",
+                CharSpan {
+                    start_char: 0,
+                    end_char: 99
+                }
+            ),
+            None
+        );
+        assert_eq!(
+            span_text(
+                "short",
+                CharSpan {
+                    start_char: 5,
+                    end_char: 3
+                }
+            ),
+            None
+        );
+        assert_eq!(
+            span_text(
+                "short",
+                CharSpan {
+                    start_char: 0,
+                    end_char: 0
+                }
+            )
+            .unwrap(),
+            ""
+        );
+        assert_eq!(
+            span_text(
+                "short",
+                CharSpan {
+                    start_char: 2,
+                    end_char: 5
+                }
+            )
+            .unwrap(),
+            "ort"
+        );
     }
 
     #[test]
@@ -1024,7 +1084,10 @@ mod tests {
             20,
         )
         .unwrap();
-        assert!(llm.notes[0].span.is_none(), "LLM notes must not fabricate spans");
+        assert!(
+            llm.notes[0].span.is_none(),
+            "LLM notes must not fabricate spans"
+        );
     }
 
     #[test]
