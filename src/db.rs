@@ -7,6 +7,11 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(test)]
+static TEST_R2D2_THREAD_POOL: std::sync::OnceLock<
+    std::sync::Arc<scheduled_thread_pool::ScheduledThreadPool>,
+> = std::sync::OnceLock::new();
+
 #[derive(Debug, Clone)]
 struct StoredTaskLineage {
     lineage_id: String,
@@ -2031,6 +2036,14 @@ impl Database {
     }
 
     fn open_inner(path: &str, test_mode: bool) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::open_inner_with_pool_size(path, test_mode, None)
+    }
+
+    fn open_inner_with_pool_size(
+        path: &str,
+        test_mode: bool,
+        pool_size_override: Option<u32>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         // #210: a connection pool lets concurrent HTTP/SSE requests read in
         // parallel under WAL instead of serializing on one Mutex<Connection>
         // (rusqlite Connection is !Sync). The PRAGMAs must be applied to EVERY
@@ -2053,10 +2066,14 @@ impl Database {
         // entities) still see SQLITE_BUSY during maintenance under heavy
         // sustained write load, raise PERSEUS_VAULT_BUSY_TIMEOUT_MS rather than
         // shrinking the store.
-        let max_size: u32 = std::env::var("PERSEUS_VAULT_POOL_MAX_SIZE")
-            .ok()
-            .and_then(|v| v.parse().ok())
+        let max_size: u32 = pool_size_override
             .filter(|&n| n > 0)
+            .or_else(|| {
+                std::env::var("PERSEUS_VAULT_POOL_MAX_SIZE")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .filter(|&n| n > 0)
+            })
             .unwrap_or(if test_mode { 4 } else { 16 });
         let busy_timeout_ms: u64 = std::env::var("PERSEUS_VAULT_BUSY_TIMEOUT_MS")
             .ok()
@@ -2095,10 +2112,27 @@ impl Database {
                  PRAGMA secure_delete=ON;",
             ))
         });
-        let pool = r2d2::Pool::builder()
+        let pool_builder = r2d2::Pool::builder()
             .max_size(max_size)
-            .connection_timeout(std::time::Duration::from_millis(pool_timeout_ms))
-            .build(manager)?;
+            .connection_timeout(std::time::Duration::from_millis(pool_timeout_ms));
+        #[cfg(test)]
+        let pool_builder = {
+            // r2d2 otherwise creates three scheduled worker threads per pool.
+            // Hundreds of isolated test fixtures can briefly coexist under the
+            // host cgroup's pids limit, so share one reaper pool across tests.
+            let reaper_pool = TEST_R2D2_THREAD_POOL
+                .get_or_init(|| {
+                    std::sync::Arc::new(
+                        scheduled_thread_pool::ScheduledThreadPool::builder()
+                            .num_threads(3)
+                            .thread_name_pattern("perseus-vault-r2d2-worker-{}")
+                            .build(),
+                    )
+                })
+                .clone();
+            pool_builder.thread_pool(reaper_pool)
+        };
+        let pool = pool_builder.build(manager)?;
 
         // Initialize schema once if this is a new database.
         let setup_conn = pool.get()?;
@@ -36519,7 +36553,19 @@ impl TestDatabase {
         Self::with_journal_mode(prefix, false)
     }
 
+    pub(crate) fn new_wal_with_pool_size(prefix: &str, max_size: u32) -> Self {
+        Self::with_journal_mode_and_pool_size(prefix, false, Some(max_size))
+    }
+
     fn with_journal_mode(prefix: &str, test_mode: bool) -> Self {
+        Self::with_journal_mode_and_pool_size(prefix, test_mode, None)
+    }
+
+    fn with_journal_mode_and_pool_size(
+        prefix: &str,
+        test_mode: bool,
+        pool_size_override: Option<u32>,
+    ) -> Self {
         let path = std::env::temp_dir()
             .join(format!("{prefix}-{}.db", uuid::Uuid::new_v4()))
             .to_string_lossy()
@@ -36527,7 +36573,8 @@ impl TestDatabase {
         // #950: the fixture deliberately used WAL so Drop's sidecar cleanup
         // stayed covered; that coverage now lives on new_wal() so the default
         // fixture can use DELETE journaling and stay within macOS fd limits.
-        let db = Database::open_inner(&path, test_mode).expect("open test database");
+        let db = Database::open_inner_with_pool_size(&path, test_mode, pool_size_override)
+            .expect("open test database");
         Self { db: Some(db), path }
     }
 
@@ -36769,6 +36816,22 @@ pub(crate) mod tests {
         let db = TestDatabase::new_wal("perseus_vault-test-db-wal");
         let path = db.path().to_string();
         (db, path)
+    }
+
+    pub(crate) fn temp_db_wal_with_pool_size(max_size: u32) -> (TestDatabase, String) {
+        let db = TestDatabase::new_wal_with_pool_size("perseus_vault-test-db-wal", max_size);
+        let path = db.path().to_string();
+        (db, path)
+    }
+
+    #[test]
+    fn test_database_fixtures_bound_r2d2_reaper_threads() {
+        // Holding many fixtures at once must not allocate three scheduler
+        // threads per r2d2 pool; the suite runs under a cgroup pids limit.
+        let fixtures: Vec<_> = (0..400)
+            .map(|i| TestDatabase::new(&format!("r2d2-reaper-bound-{i}")))
+            .collect();
+        assert_eq!(fixtures.len(), 400);
     }
 
     #[test]
@@ -51288,7 +51351,11 @@ pub(crate) mod tests {
         use std::sync::Arc;
         use std::thread;
 
-        let (db, path) = temp_db_wal();
+        // Eight concurrent workers need enough checkout capacity to avoid
+        // pool starvation while SQLite writers wait on WAL locks. Keep the
+        // ordinary fixture pool bounded; opt this concurrency contract into a
+        // dedicated 16-connection fixture instead of changing every test.
+        let (db, path) = temp_db_wal_with_pool_size(16);
         let db = Arc::new(db);
 
         // Raw inserts through the pool (each thread checks out its own pooled
