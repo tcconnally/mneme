@@ -141,9 +141,9 @@ pub fn build(db: &Database, ctx: &DeploymentContext) -> ConfigReport {
             })
             .unwrap_or_else(|| "float32".to_string())
         };
-        let requested = flag
-            .clone()
-            .unwrap_or_else(|| "(unset → store embedding_format record, default float32)".to_string());
+        let requested = flag.clone().unwrap_or_else(|| {
+            "(unset → store embedding_format record, default float32)".to_string()
+        });
         let resolved = record_q.clone();
         // Drift when the store resolves to a format the operator did not ask
         // for in THIS process: flag unset while the store record is quantized
@@ -174,13 +174,15 @@ pub fn build(db: &Database, ctx: &DeploymentContext) -> ConfigReport {
     {
         let flag = std::env::var("PERSEUS_VAULT_EMBEDDING_FINGERPRINT").ok();
         let enabled = db.fingerprint_enabled();
-        let requested = flag
-            .clone()
-            .unwrap_or_else(|| "(unset → off)".to_string());
-        let resolved = if enabled { "on".to_string() } else { "off".to_string() };
-        let drifted = flag.as_deref().is_some_and(|f| {
-            crate::db::Database::parse_fingerprint_flag(f).ok() != Some(enabled)
-        });
+        let requested = flag.clone().unwrap_or_else(|| "(unset → off)".to_string());
+        let resolved = if enabled {
+            "on".to_string()
+        } else {
+            "off".to_string()
+        };
+        let drifted = flag
+            .as_deref()
+            .is_some_and(|f| crate::db::Database::parse_fingerprint_flag(f).ok() != Some(enabled));
         stages.push(StageReport {
             stage: "fingerprint_tier".to_string(),
             requested,

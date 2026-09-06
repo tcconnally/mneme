@@ -24,8 +24,18 @@
 use serde::Serialize;
 
 pub const NEGATION_WORDS: [&str; 12] = [
-    "not", "no", "never", "cannot", "can't", "won't", "must not", "mustn't", "no longer",
-    "don't", "do not", "stop",
+    "not",
+    "no",
+    "never",
+    "cannot",
+    "can't",
+    "won't",
+    "must not",
+    "mustn't",
+    "no longer",
+    "don't",
+    "do not",
+    "stop",
 ];
 
 #[derive(Debug, Clone, Serialize)]
@@ -94,20 +104,38 @@ mod tests {
 
     #[test]
     fn negation_prefilter_requires_overlap_and_negation() {
-        assert!(negation_prefilter("the import works fine", "the import does not work"));
-        assert!(!negation_prefilter("the import works fine", "the import works today"));
+        assert!(negation_prefilter(
+            "the import works fine",
+            "the import does not work"
+        ));
+        assert!(!negation_prefilter(
+            "the import works fine",
+            "the import works today"
+        ));
         assert!(!negation_prefilter("alpha", "beta does not work"));
         assert!(!negation_prefilter("import works", "export broken"));
     }
 
     #[test]
     fn negation_words_cover_contractions_and_phrases() {
-        assert!(negation_prefilter("alpha beta gamma must not run", "alpha beta gamma runs"));
-        assert!(negation_prefilter("alpha beta gamma never runs", "alpha beta gamma runs"));
-        assert!(negation_prefilter("alpha beta gamma runs", "alpha beta gamma no longer runs"));
+        assert!(negation_prefilter(
+            "alpha beta gamma must not run",
+            "alpha beta gamma runs"
+        ));
+        assert!(negation_prefilter(
+            "alpha beta gamma never runs",
+            "alpha beta gamma runs"
+        ));
+        assert!(negation_prefilter(
+            "alpha beta gamma runs",
+            "alpha beta gamma no longer runs"
+        ));
         // "nothing" contains "not" as a substring — token matching must not
         // false-positive on it.
-        assert!(!negation_prefilter("alpha beta nothing here", "alpha beta gamma"));
+        assert!(!negation_prefilter(
+            "alpha beta nothing here",
+            "alpha beta gamma"
+        ));
     }
 
     #[test]
@@ -152,9 +180,18 @@ mod tests {
         // via remember_skip_dedup — the sleep pass exists precisely to catch
         // rows that never went through the write-time dedup gate (legacy
         // imports, skip_dedup writers).
-        db.remember_skip_dedup(&seed("s-1", "the import pipeline handles csv files correctly")).unwrap();
-        db.remember_skip_dedup(&seed("s-2", "the import pipeline handles csv files perfectly")).unwrap();
-        db.remember_skip_dedup(&seed("s-3", "the import pipeline does not work on linux")).unwrap();
+        db.remember_skip_dedup(&seed(
+            "s-1",
+            "the import pipeline handles csv files correctly",
+        ))
+        .unwrap();
+        db.remember_skip_dedup(&seed(
+            "s-2",
+            "the import pipeline handles csv files perfectly",
+        ))
+        .unwrap();
+        db.remember_skip_dedup(&seed("s-3", "the import pipeline does not work on linux"))
+            .unwrap();
         let params = crate::models::SleepParams {
             category: "facts".to_string(),
             similarity_threshold: 0.6,
@@ -169,15 +206,15 @@ mod tests {
         };
         let report = db.run_sleep(&params).unwrap();
         assert_eq!(report.scanned, 3, "scan must see all three seeded entities");
-        assert!(report.dedup_proposals >= 1, "near-duplicate pair must be proposed as merge");
         assert!(
-            report
-                .proposals
-                .iter()
-                .any(|p| p.kind == "conflict" && {
-                    (p.entity_a == "s-1" || p.entity_a == "s-3")
-                        && (p.entity_b == "s-1" || p.entity_b == "s-3")
-                }),
+            report.dedup_proposals >= 1,
+            "near-duplicate pair must be proposed as merge"
+        );
+        assert!(
+            report.proposals.iter().any(|p| p.kind == "conflict" && {
+                (p.entity_a == "s-1" || p.entity_a == "s-3")
+                    && (p.entity_b == "s-1" || p.entity_b == "s-3")
+            }),
             "negation pair must be proposed as conflict even when textually similar"
         );
         // Dry-run: zero persisted proposals.

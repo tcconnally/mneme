@@ -37,8 +37,7 @@ fn canonical_value(value: &Value) -> String {
             format!("{{{}}}", body.join(","))
         }
         Value::Array(items) => {
-            let body: Vec<String> =
-                items.iter().map(canonical_value).collect();
+            let body: Vec<String> = items.iter().map(canonical_value).collect();
             format!("[{}]", body.join(","))
         }
         other => other.to_string(),
@@ -93,9 +92,7 @@ pub fn verify_profile(
 ) -> Result<ProfileVerification, String> {
     let profile: Value = serde_json::from_str(profile_json)
         .map_err(|e| format!("profile is not valid JSON: {e}"))?;
-    let obj = profile
-        .as_object()
-        .ok_or("profile must be a JSON object")?;
+    let obj = profile.as_object().ok_or("profile must be a JSON object")?;
     if obj.get("schema").and_then(Value::as_str) != Some(PROFILE_SCHEMA) {
         return Err(format!("profile schema must be {PROFILE_SCHEMA}"));
     }
@@ -103,9 +100,7 @@ pub fn verify_profile(
         .get("signer_key_b64")
         .and_then(Value::as_str)
         .ok_or("profile missing signer_key_b64")?;
-    let payload = obj
-        .get("payload")
-        .ok_or("profile missing payload")?;
+    let payload = obj.get("payload").ok_or("profile missing payload")?;
     let signature_b64 = obj
         .get("signature_b64")
         .and_then(Value::as_str)
@@ -126,15 +121,15 @@ pub fn verify_profile(
 
     let fingerprint = sha256_hex(&public.to_bytes());
     let payload_digest = sha256_hex(&canonical);
-    Ok(ProfileVerification { signer_fingerprint: fingerprint, payload_digest })
+    Ok(ProfileVerification {
+        signer_fingerprint: fingerprint,
+        payload_digest,
+    })
 }
 
 /// Sign a profile payload (test/authoring helper). Returns the full profile
 /// document with the raw (uncompressed) public key embedded.
-pub fn sign_profile(
-    signing_key_bytes: &[u8; 32],
-    payload: &Value,
-) -> Result<Value, String> {
+pub fn sign_profile(signing_key_bytes: &[u8; 32], payload: &Value) -> Result<Value, String> {
     use base64::Engine as _;
     let signing = SigningKey::from_bytes(signing_key_bytes);
     let canonical = canonical_json_bytes(payload);
@@ -170,8 +165,8 @@ mod tests {
         let payload = json!({"agent_id": "agent-837", "workspace_hash": "ws-837",
                              "allowed_capabilities": ["tool.run"], "mode": "enforce"});
         let profile = sign_profile(signing.as_bytes(), &payload).unwrap();
-        let trusted = base64::engine::general_purpose::STANDARD
-            .encode(signing.verifying_key().to_bytes());
+        let trusted =
+            base64::engine::general_purpose::STANDARD.encode(signing.verifying_key().to_bytes());
         let v = verify_profile(&profile.to_string(), &trusted).unwrap();
         assert_eq!(v.payload_digest.len(), 64);
         assert_eq!(v.signer_fingerprint.len(), 64);
@@ -184,8 +179,8 @@ mod tests {
                              "allowed_capabilities": ["tool.run"], "mode": "enforce"});
         let mut profile = sign_profile(signing.as_bytes(), &payload).unwrap();
         profile["payload"]["allowed_capabilities"] = json!(["rm_rf"]);
-        let trusted = base64::engine::general_purpose::STANDARD
-            .encode(signing.verifying_key().to_bytes());
+        let trusted =
+            base64::engine::general_purpose::STANDARD.encode(signing.verifying_key().to_bytes());
         let err = verify_profile(&profile.to_string(), &trusted).unwrap_err();
         assert!(err.contains("verification failed"), "got: {err}");
     }
@@ -196,8 +191,7 @@ mod tests {
         let payload = json!({"agent_id": "agent-837", "workspace_hash": "ws-837",
                              "allowed_capabilities": ["tool.run"]});
         let profile = sign_profile(signing.as_bytes(), &payload).unwrap();
-        let trusted = base64::engine::general_purpose::STANDARD
-            .encode([9u8; 32]); // different trusted key
+        let trusted = base64::engine::general_purpose::STANDARD.encode([9u8; 32]); // different trusted key
         let err = verify_profile(&profile.to_string(), &trusted).unwrap_err();
         assert!(err.contains("not the trusted key"), "got: {err}");
     }

@@ -466,9 +466,8 @@ fn handoff_report_for(stale: bool, dry_run: bool, confirm: bool) -> Value {
         );
     } else if !confirm {
         report["status"] = json!("confirm_required");
-        report["note"] = json!(
-            "Binary replaced; pass {\"confirm\": true} to perform the hot-swap."
-        );
+        report["note"] =
+            json!("Binary replaced; pass {\"confirm\": true} to perform the hot-swap.");
     } else {
         report["status"] = json!("handoff_performed");
         report["note"] = json!(
@@ -488,8 +487,14 @@ fn handoff_report_for(stale: bool, dry_run: bool, confirm: bool) -> Value {
 /// - stale + `confirm` → schedules the hot-swap; the server loop performs the
 ///   spawn AFTER flushing this very response, then exits.
 pub fn handle_handoff_restart(args: Value) -> Result<String, String> {
-    let dry_run = args.get("dry_run").and_then(Value::as_bool).unwrap_or(false);
-    let confirm = args.get("confirm").and_then(Value::as_bool).unwrap_or(false);
+    let dry_run = args
+        .get("dry_run")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let confirm = args
+        .get("confirm")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let stale = running_stale();
     let report = handoff_report_for(stale, dry_run, confirm);
     if stale && confirm && !dry_run {
@@ -580,7 +585,10 @@ mod tests {
 
         let go = handoff_report_for(true, false, true);
         assert_eq!(go["status"], "handoff_performed");
-        assert!(go["binary_path"].as_str().map(|s| !s.is_empty()).unwrap_or(false));
+        assert!(go["binary_path"]
+            .as_str()
+            .map(|s| !s.is_empty())
+            .unwrap_or(false));
     }
 
     #[test]
@@ -642,7 +650,10 @@ mod tests {
 
     #[test]
     fn take_handoff_state_reads_and_clears_env() {
-        std::env::set_var(HANDOFF_STATE_ENV, r#"{"initialized":true,"session_agent_id":"a"}"#);
+        std::env::set_var(
+            HANDOFF_STATE_ENV,
+            r#"{"initialized":true,"session_agent_id":"a"}"#,
+        );
         let hs = take_handoff_state().expect("take");
         assert!(hs.initialized);
         assert_eq!(hs.session_agent_id, "a");

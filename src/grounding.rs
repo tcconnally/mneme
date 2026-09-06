@@ -234,7 +234,10 @@ mod tests {
     fn fingerprints_are_deterministic_and_content_sensitive() {
         let a = fingerprint_hex(BODY, SEED).unwrap();
         let b = fingerprint_hex(BODY, SEED).unwrap();
-        assert_eq!(a, b, "identical content must produce identical fingerprints");
+        assert_eq!(
+            a, b,
+            "identical content must produce identical fingerprints"
+        );
         let mutated = BODY.replace("u64", "u128");
         let c = fingerprint_hex(&mutated, SEED).unwrap();
         assert_ne!(a, c, "mutated content must drift");
@@ -268,12 +271,14 @@ mod tests {
         let nb_base = neighbor_set(BODY);
         let nb_moved = neighbor_set(&moved);
         let score = reconcile_score(&sig_base, &sig_moved, &nb_base, &nb_moved);
-        assert!(score >= HI, "moved content should clear the HI threshold: {score}");
+        assert!(
+            score >= HI,
+            "moved content should clear the HI threshold: {score}"
+        );
         let foreign = "fn unrelated() { let x = vec![1,2,3,4,5,6,7,8,9]; println!(\"{}\", x.iter().sum::<i32>()); }";
         let sig_foreign = minhash(foreign, SEED).unwrap();
         let nb_foreign = neighbor_set(foreign);
-        let foreign_score =
-            reconcile_score(&sig_base, &sig_foreign, &nb_base, &nb_foreign);
+        let foreign_score = reconcile_score(&sig_base, &sig_foreign, &nb_base, &nb_foreign);
         assert!(
             foreign_score < LO,
             "foreign content should fall below the LO threshold: {foreign_score}"

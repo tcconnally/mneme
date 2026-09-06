@@ -172,14 +172,16 @@ fn derive_beliefs_scoped(
     drop(stmt);
     let rows: Vec<_> = raw_rows
         .into_iter()
-        .map(|(id, cat, key, raw_body, certainty, verified, status, ws, touched, links)| {
-            let body_json = db
-                .decrypt_body_for_read(&raw_body, &cat, &key)
-                .map_err(|e| format!("belief body hydration failed: {e}"))?;
-            Ok((
-                id, cat, key, body_json, certainty, verified, status, ws, touched, links,
-            ))
-        })
+        .map(
+            |(id, cat, key, raw_body, certainty, verified, status, ws, touched, links)| {
+                let body_json = db
+                    .decrypt_body_for_read(&raw_body, &cat, &key)
+                    .map_err(|e| format!("belief body hydration failed: {e}"))?;
+                Ok((
+                    id, cat, key, body_json, certainty, verified, status, ws, touched, links,
+                ))
+            },
+        )
         .collect::<Result<Vec<_>, String>>()?;
 
     // Reverse evidence map: target entity id -> ids of supporter entities.
@@ -245,8 +247,7 @@ pub fn handle_beliefs(db: &Database, args: Value) -> Result<String, String> {
     }
     let ws_filter = a.workspace_hash.as_deref().filter(|s| !s.is_empty());
 
-    let mut beliefs =
-        derive_beliefs_scoped(db, a.category.as_deref(), ws_filter)?;
+    let mut beliefs = derive_beliefs_scoped(db, a.category.as_deref(), ws_filter)?;
 
     // Filters: query substring, confidence floor, supersession, scope
     // visibility (a scoped query sees its own workspace plus global).
@@ -405,7 +406,10 @@ mod tests {
             .expect("target belief");
         assert_eq!(target_belief["support_count"], 2);
         assert_eq!(
-            target_belief["supporting_entity_ids"].as_array().unwrap().len(),
+            target_belief["supporting_entity_ids"]
+                .as_array()
+                .unwrap()
+                .len(),
             1
         );
     }

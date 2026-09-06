@@ -130,17 +130,19 @@ impl AnswerOutcome {
             return Err("unsupported answer outcome schema_version".to_string());
         }
         if !SAFE_OUTCOME_STATUSES.contains(&self.status.as_str()) {
-            return Err(format!("unsupported answer outcome status '{}':", self.status));
+            return Err(format!(
+                "unsupported answer outcome status '{}':",
+                self.status
+            ));
         }
         if self.reason.is_empty() || self.reason.len() > 256 {
             return Err("answer outcome reason must be bounded and non-empty".to_string());
         }
         if self.reason_codes.is_empty()
             || self.reason_codes.len() > 16
-            || self
-                .reason_codes
-                .iter()
-                .any(|reason| reason.is_empty() || reason.len() > 256 || reason != &safe_reason(reason))
+            || self.reason_codes.iter().any(|reason| {
+                reason.is_empty() || reason.len() > 256 || reason != &safe_reason(reason)
+            })
             || !self.reason_codes.contains(&self.reason)
         {
             return Err("answer outcome reason_codes are invalid".to_string());
@@ -301,7 +303,14 @@ pub fn for_recall(recall: &RecallOutcome, hits: usize) -> AnswerOutcome {
         mode: "canonical_retrieval".to_string(),
         reason: reason.clone(),
     });
-    AnswerOutcome::new(status, recall_status, reason, abstained, answerable, fallback)
+    AnswerOutcome::new(
+        status,
+        recall_status,
+        reason,
+        abstained,
+        answerable,
+        fallback,
+    )
 }
 
 /// Map a successful task-state serving response into the shared answer outcome
@@ -337,19 +346,26 @@ pub fn for_task(
         status,
         recall_status,
         reason,
-        matches!(outcome, TaskStateOutcome::Abstained | TaskStateOutcome::Unavailable),
-        matches!(outcome, TaskStateOutcome::Complete) ||
-            matches!(outcome, TaskStateOutcome::Partial | TaskStateOutcome::Degraded)
-                && accepted > 0,
-        fallback.map(|fallback| SafeFallback {
-            mode: fallback.mode.clone(),
-            reason: safe_reason(&fallback.reason),
-        }).or_else(|| {
-            (status != "complete").then(|| SafeFallback {
-                mode: "canonical_retrieval".to_string(),
-                reason: reason.to_string(),
+        matches!(
+            outcome,
+            TaskStateOutcome::Abstained | TaskStateOutcome::Unavailable
+        ),
+        matches!(outcome, TaskStateOutcome::Complete)
+            || matches!(
+                outcome,
+                TaskStateOutcome::Partial | TaskStateOutcome::Degraded
+            ) && accepted > 0,
+        fallback
+            .map(|fallback| SafeFallback {
+                mode: fallback.mode.clone(),
+                reason: safe_reason(&fallback.reason),
             })
-        }),
+            .or_else(|| {
+                (status != "complete").then(|| SafeFallback {
+                    mode: "canonical_retrieval".to_string(),
+                    reason: reason.to_string(),
+                })
+            }),
     );
     let mut exclusions = Vec::new();
     if rejected > 0 {
@@ -377,10 +393,7 @@ pub fn for_task(
         .collect();
     answer.reason_codes = merge_reason_codes(
         &answer.reason,
-        answer
-            .exclusions
-            .iter()
-            .map(|entry| entry.reason.as_str()),
+        answer.exclusions.iter().map(|entry| entry.reason.as_str()),
     );
     answer
 }
@@ -390,8 +403,15 @@ pub fn for_task(
 /// remain unavailable. The raw resolver text is never serialized.
 pub fn for_task_failure(error: &str) -> AnswerOutcome {
     let reason = failure_reason(error);
-    let unavailable = matches!(reason.as_str(), "unavailable_evidence" | "backend_unavailable");
-    let status = if unavailable { "unavailable" } else { "abstained" };
+    let unavailable = matches!(
+        reason.as_str(),
+        "unavailable_evidence" | "backend_unavailable"
+    );
+    let status = if unavailable {
+        "unavailable"
+    } else {
+        "abstained"
+    };
     let mut answer = AnswerOutcome::new(
         status,
         if unavailable { "unavailable" } else { "stale" },
@@ -419,11 +439,17 @@ fn failure_reason(error: &str) -> String {
         "stale".to_string()
     } else if lower.contains("workspace scope") || lower.contains("scope mismatch") {
         "out_of_scope".to_string()
-    } else if lower.contains("invisible") || lower.contains("requester") || lower.contains("suppressed") {
+    } else if lower.contains("invisible")
+        || lower.contains("requester")
+        || lower.contains("suppressed")
+    {
         "invisible".to_string()
     } else if lower.contains("digest") || lower.contains("malformed") {
         "invalid_evidence".to_string()
-    } else if lower.contains("unavailable") || lower.contains("database") || lower.contains("lookup failed") {
+    } else if lower.contains("unavailable")
+        || lower.contains("database")
+        || lower.contains("lookup failed")
+    {
         "unavailable_evidence".to_string()
     } else {
         "invalid_evidence".to_string()
@@ -654,9 +680,7 @@ fn safe_fallback_mode(value: &str) -> String {
 
 fn safe_recall_status(value: &str) -> String {
     match value {
-        "fresh" | "partial" | "timeout" | "unavailable" | "empty" | "stale" => {
-            value.to_string()
-        }
+        "fresh" | "partial" | "timeout" | "unavailable" | "empty" | "stale" => value.to_string(),
         _ => "unavailable".to_string(),
     }
 }

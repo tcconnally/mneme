@@ -72,7 +72,12 @@ mod tests {
 
     #[test]
     fn never_auto_demotes_or_auto_corroborates() {
-        for state in ["verified", "corroborated", "rejected", "defensively_recalled"] {
+        for state in [
+            "verified",
+            "corroborated",
+            "rejected",
+            "defensively_recalled",
+        ] {
             assert_eq!(next_epistemic_state(state, 0.0, 0), None, "{state}");
             assert_eq!(next_epistemic_state(state, 100.0, 10), None, "{state}");
         }
@@ -133,7 +138,8 @@ mod tests {
             _parsed_body: None,
         };
         db.remember(&entity).unwrap();
-        db.apply_recall_side_effects(&["u-recall-1".to_string()]).unwrap();
+        db.apply_recall_side_effects(&["u-recall-1".to_string()])
+            .unwrap();
         let conn = db.conn().unwrap();
         let utility: f64 = conn
             .query_row(

@@ -475,14 +475,20 @@ mod bundled_tests {
     #[test]
     fn bundled_model_embeds_and_is_semantic() {
         let cfg = EmbeddingConfig::default();
-        assert!(cfg.enabled && cfg.bundled, "bundled config should be on by default");
+        assert!(
+            cfg.enabled && cfg.bundled,
+            "bundled config should be on by default"
+        );
 
         let v = generate_embedding(&cfg, "hello world").expect("bundled embedding works");
         assert_eq!(v.len(), 384, "all-MiniLM-L6-v2 is 384-dim");
 
         // Output is L2-normalized → unit norm.
         let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!((norm - 1.0).abs() < 1e-3, "expected unit vector, norm={norm}");
+        assert!(
+            (norm - 1.0).abs() < 1e-3,
+            "expected unit vector, norm={norm}"
+        );
 
         // Semantically related texts rank above an unrelated one (sanity that the
         // quantized model produces meaningful embeddings, not noise).

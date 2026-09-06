@@ -61,7 +61,12 @@ impl SessionRegistry {
             .and_then(|value| value.parse::<usize>().ok())
             .filter(|value| *value > 0)
             .unwrap_or(DEFAULT_MAX_HTTP_SESSIONS);
-        Self { entries: HashMap::new(), clock: 0, max_sessions, profile }
+        Self {
+            entries: HashMap::new(),
+            clock: 0,
+            max_sessions,
+            profile,
+        }
     }
 
     fn get(&mut self, session_id: &str) -> Option<Arc<MCPState>> {
@@ -83,7 +88,9 @@ impl SessionRegistry {
 
     fn insert(&mut self, session_id: String, state: Arc<MCPState>, ready: bool) {
         if self.entries.len() >= self.max_sessions {
-            if let Some(oldest) = self.entries.iter()
+            if let Some(oldest) = self
+                .entries
+                .iter()
                 .min_by_key(|(_, entry)| entry.last_used)
                 .map(|(id, _)| id.clone())
             {
@@ -91,15 +98,20 @@ impl SessionRegistry {
             }
         }
         self.clock = self.clock.wrapping_add(1);
-        self.entries.insert(session_id, SessionEntry {
-            state,
-            last_used: self.clock,
-            ready,
-        });
+        self.entries.insert(
+            session_id,
+            SessionEntry {
+                state,
+                last_used: self.clock,
+                ready,
+            },
+        );
     }
 
     fn mark_ready(&mut self, session_id: &str) -> bool {
-        let Some(entry) = self.entries.get_mut(session_id) else { return false };
+        let Some(entry) = self.entries.get_mut(session_id) else {
+            return false;
+        };
         entry.ready = true;
         true
     }
@@ -242,7 +254,9 @@ fn origin_allowed(origin: Option<&str>) -> bool {
             return list.split(',').any(|item| item.trim() == origin);
         }
     }
-    let Some((scheme, rest)) = origin.split_once("://") else { return false };
+    let Some((scheme, rest)) = origin.split_once("://") else {
+        return false;
+    };
     if !matches!(scheme, "http" | "https") {
         return false;
     }
@@ -251,10 +265,14 @@ fn origin_allowed(origin: Option<&str>) -> bool {
         return false;
     }
     let host = if let Some(bracketed) = authority.strip_prefix('[') {
-        let Some(end) = bracketed.find(']') else { return false };
+        let Some(end) = bracketed.find(']') else {
+            return false;
+        };
         let suffix = &bracketed[end + 1..];
         if !suffix.is_empty()
-            && !suffix.strip_prefix(':').is_some_and(|port| port.parse::<u16>().is_ok())
+            && !suffix
+                .strip_prefix(':')
+                .is_some_and(|port| port.parse::<u16>().is_ok())
         {
             return false;
         }
@@ -355,7 +373,10 @@ fn requested_session_id(
         Some(value) => (Some(value), true),
         None => (params.session_id.clone(), false),
     };
-    if session_id.as_deref().is_some_and(|id| !valid_session_id(id)) {
+    if session_id
+        .as_deref()
+        .is_some_and(|id| !valid_session_id(id))
+    {
         return Err(StatusCode::BAD_REQUEST);
     }
     Ok((session_id, from_header))
@@ -388,18 +409,27 @@ fn resolve_mcp_session(
             return Err(StatusCode::BAD_REQUEST);
         }
         if let Some(session_id) = requested_id {
-            let mcp_state = state.sessions.lock()
+            let mcp_state = state
+                .sessions
+                .lock()
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
                 .get_any(&session_id)
                 .ok_or(StatusCode::NOT_FOUND)?;
             return Ok((mcp_state, Some(session_id), false, true));
         }
         let session_id = uuid::Uuid::new_v4().to_string();
-        return Ok((Arc::new(MCPState::new_with_profile(state.profile)), Some(session_id), true, false));
+        return Ok((
+            Arc::new(MCPState::new_with_profile(state.profile)),
+            Some(session_id),
+            true,
+            false,
+        ));
     }
 
     let session_id = requested_id.ok_or(StatusCode::BAD_REQUEST)?;
-    let mcp_state = state.sessions.lock()
+    let mcp_state = state
+        .sessions
+        .lock()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .get(&session_id)
         .ok_or(StatusCode::NOT_FOUND)?;
@@ -428,11 +458,14 @@ async fn handle_message(
     let req: JsonRpcRequest = match serde_json::from_value(request) {
         Ok(r) => r,
         Err(e) => {
-            return Ok(json_response(json!({
-                "jsonrpc": "2.0",
-                "id": null,
-                "error": {"code": -32700, "message": format!("Parse error: {}", e)}
-            }), None));
+            return Ok(json_response(
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": null,
+                    "error": {"code": -32700, "message": format!("Parse error: {}", e)}
+                }),
+                None,
+            ));
         }
     };
 
@@ -448,18 +481,19 @@ async fn handle_message(
     // The registry lock was released above; concurrent sessions and requests run
     // independently while sharing only the pooled database.
     let pending_state = pending_session.then(|| Arc::clone(&mcp_state));
-    let response = tokio::task::spawn_blocking(move || {
-        mcp::handle_request(&req, &mcp_state, &state.db)
-    })
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let response =
+        tokio::task::spawn_blocking(move || mcp::handle_request(&req, &mcp_state, &state.db))
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     match response {
         Some(resp) => {
             if pending_state.is_some() || mark_ready {
                 if resp.error.is_none() {
                     let ready_id = session_id.clone().expect("pending session id");
-                    let mut sessions = state.sessions.lock()
+                    let mut sessions = state
+                        .sessions
+                        .lock()
                         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
                     if let Some(pending_state) = pending_state {
                         sessions.insert(ready_id, pending_state, true);
@@ -503,12 +537,17 @@ async fn handle_sse(
         .transpose()
         .map_err(|_| StatusCode::BAD_REQUEST)?;
     let requested_id = header_id.or(params.session_id);
-    if requested_id.as_deref().is_some_and(|id| !valid_session_id(id)) {
+    if requested_id
+        .as_deref()
+        .is_some_and(|id| !valid_session_id(id))
+    {
         return Err(StatusCode::BAD_REQUEST);
     }
 
     let session_id = {
-        let mut sessions = state.sessions.lock()
+        let mut sessions = state
+            .sessions
+            .lock()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         match requested_id {
             Some(session_id) => {
@@ -519,13 +558,18 @@ async fn handle_sse(
         }
     };
     {
-        let mut active = state.active_sse.lock()
+        let mut active = state
+            .active_sse
+            .lock()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         if !active.insert(session_id.clone()) {
             return Err(StatusCode::CONFLICT);
         }
     }
-    let lease = SseLease { state, session_id: session_id.clone() };
+    let lease = SseLease {
+        state,
+        session_id: session_id.clone(),
+    };
     let endpoint = format!("/message?session_id={session_id}");
     let rx = state.sse_tx.subscribe();
 
@@ -559,7 +603,6 @@ async fn handle_sse(
             .text("keep-alive"),
     ))
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -651,56 +694,100 @@ mod tests {
 
     #[tokio::test]
     async fn independent_http_clients_receive_independent_mcp_sessions() {
-        let path = std::env::temp_dir()
-            .join(format!("perseus-vault-http-sessions-{}.db", uuid::Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!(
+            "perseus-vault-http-sessions-{}.db",
+            uuid::Uuid::new_v4()
+        ));
         let db = Database::open(path.to_str().unwrap()).expect("open session test db");
         init_transport_state(Arc::new(db));
         let router = build_transport_router(TransportMode::Http, None);
 
-        let initialize = |id: u64, name: &str| Request::builder()
-            .method("POST")
-            .uri("/message")
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(json!({
-                "jsonrpc": "2.0", "id": id, "method": "initialize",
-                "params": {
-                    "protocolVersion": "2025-06-18", "capabilities": {},
-                    "clientInfo": {"name": name, "version": "0"}
-                }
-            }).to_string()))
+        let initialize = |id: u64, name: &str| {
+            Request::builder()
+                .method("POST")
+                .uri("/message")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "jsonrpc": "2.0", "id": id, "method": "initialize",
+                        "params": {
+                            "protocolVersion": "2025-06-18", "capabilities": {},
+                            "clientInfo": {"name": name, "version": "0"}
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap()
+        };
+
+        let first = router
+            .clone()
+            .oneshot(initialize(1, "client-a"))
+            .await
             .unwrap();
-
-        let first = router.clone().oneshot(initialize(1, "client-a")).await.unwrap();
         assert_eq!(first.status(), StatusCode::OK);
-        let first_session = first.headers().get(MCP_SESSION_ID_HEADER)
+        let first_session = first
+            .headers()
+            .get(MCP_SESSION_ID_HEADER)
             .and_then(|v| v.to_str().ok())
-            .expect("initialize must return Mcp-Session-Id").to_string();
-        let first_body = axum::body::to_bytes(first.into_body(), usize::MAX).await.unwrap();
+            .expect("initialize must return Mcp-Session-Id")
+            .to_string();
+        let first_body = axum::body::to_bytes(first.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let first_value: Value = serde_json::from_slice(&first_body).unwrap();
-        assert!(first_value.get("result").is_some(), "first initialize failed: {first_value}");
+        assert!(
+            first_value.get("result").is_some(),
+            "first initialize failed: {first_value}"
+        );
 
-        let second = router.clone().oneshot(initialize(2, "client-b")).await.unwrap();
+        let second = router
+            .clone()
+            .oneshot(initialize(2, "client-b"))
+            .await
+            .unwrap();
         assert_eq!(second.status(), StatusCode::OK);
-        let second_session = second.headers().get(MCP_SESSION_ID_HEADER)
+        let second_session = second
+            .headers()
+            .get(MCP_SESSION_ID_HEADER)
             .and_then(|v| v.to_str().ok())
-            .expect("initialize must return Mcp-Session-Id").to_string();
-        let second_body = axum::body::to_bytes(second.into_body(), usize::MAX).await.unwrap();
+            .expect("initialize must return Mcp-Session-Id")
+            .to_string();
+        let second_body = axum::body::to_bytes(second.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let second_value: Value = serde_json::from_slice(&second_body).unwrap();
-        assert!(second_value.get("result").is_some(), "second initialize failed: {second_value}");
+        assert!(
+            second_value.get("result").is_some(),
+            "second initialize failed: {second_value}"
+        );
         assert_ne!(first_session, second_session);
 
         let sessions_before = get_state().unwrap().sessions.lock().unwrap().entries.len();
-        let failed_initialize = router.clone().oneshot(Request::builder()
-            .method("POST")
-            .uri("/message")
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(json!({
-                "jsonrpc":"1.0", "id":9, "method":"initialize", "params":{}
-            }).to_string()))
-            .unwrap()).await.unwrap();
-        assert!(failed_initialize.headers().get(MCP_SESSION_ID_HEADER).is_none());
+        let failed_initialize = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/message")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({
+                            "jsonrpc":"1.0", "id":9, "method":"initialize", "params":{}
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(failed_initialize
+            .headers()
+            .get(MCP_SESSION_ID_HEADER)
+            .is_none());
         let failed_body = axum::body::to_bytes(failed_initialize.into_body(), usize::MAX)
-            .await.unwrap();
+            .await
+            .unwrap();
         let failed_value: Value = serde_json::from_slice(&failed_body).unwrap();
         assert!(failed_value.get("error").is_some());
         assert_eq!(
@@ -720,25 +807,43 @@ mod tests {
 
         let no_session = router.clone().oneshot(message_request(None)).await.unwrap();
         assert_eq!(no_session.status(), StatusCode::BAD_REQUEST);
-        let fixed_initialize = router.clone().oneshot(Request::builder()
-            .method("POST")
-            .uri("/message?session_id=caller-selected")
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(json!({
-                "jsonrpc":"2.0", "id":7, "method":"initialize", "params":{}
-            }).to_string()))
-            .unwrap()).await.unwrap();
+        let fixed_initialize = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/message?session_id=caller-selected")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({
+                            "jsonrpc":"2.0", "id":7, "method":"initialize", "params":{}
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(fixed_initialize.status(), StatusCode::NOT_FOUND);
-        let invalid_version = router.clone().oneshot(Request::builder()
-            .method("POST")
-            .uri("/message")
-            .header(header::CONTENT_TYPE, "application/json")
-            .header(MCP_SESSION_ID_HEADER, &first_session)
-            .header(MCP_PROTOCOL_VERSION_HEADER, "1900-01-01")
-            .body(Body::from(json!({
-                "jsonrpc":"2.0", "id":8, "method":"tools/list", "params":{}
-            }).to_string()))
-            .unwrap()).await.unwrap();
+        let invalid_version = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/message")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(MCP_SESSION_ID_HEADER, &first_session)
+                    .header(MCP_PROTOCOL_VERSION_HEADER, "1900-01-01")
+                    .body(Body::from(
+                        json!({
+                            "jsonrpc":"2.0", "id":8, "method":"tools/list", "params":{}
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(invalid_version.status(), StatusCode::BAD_REQUEST);
 
         // SSE subscribers must not receive another session's response.
@@ -747,95 +852,164 @@ mod tests {
         // Legacy HTTP+SSE opens GET first; the endpoint event carries a
         // server-issued query session, whose initialize response returns on SSE.
         let legacy_open = build_transport_router(TransportMode::Sse, None)
-            .oneshot(Request::builder().method("GET").uri("/sse")
-                .body(Body::empty()).unwrap()).await.unwrap();
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/sse")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         let mut legacy_stream = legacy_open.into_body().into_data_stream();
-        let endpoint_event = tokio::time::timeout(
-            std::time::Duration::from_secs(1), legacy_stream.next()
-        ).await.expect("legacy endpoint event timed out")
-            .expect("legacy SSE stream ended").expect("legacy SSE body error");
+        let endpoint_event =
+            tokio::time::timeout(std::time::Duration::from_secs(1), legacy_stream.next())
+                .await
+                .expect("legacy endpoint event timed out")
+                .expect("legacy SSE stream ended")
+                .expect("legacy SSE body error");
         let endpoint_text = String::from_utf8_lossy(&endpoint_event);
-        let legacy_session = endpoint_text.split("session_id=").nth(1)
+        let legacy_session = endpoint_text
+            .split("session_id=")
+            .nth(1)
             .and_then(|value| value.lines().next())
-            .expect("legacy endpoint omitted session_id").trim().to_string();
-        let legacy_init = router.clone().oneshot(Request::builder()
-            .method("POST")
-            .uri(format!("/message?session_id={legacy_session}"))
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(json!({
-                "jsonrpc":"2.0", "id":10, "method":"initialize",
-                "params":{"clientInfo":{"name":"client-c","version":"0"}}
-            }).to_string()))
-            .unwrap()).await.unwrap();
+            .expect("legacy endpoint omitted session_id")
+            .trim()
+            .to_string();
+        let legacy_init = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/message?session_id={legacy_session}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({
+                            "jsonrpc":"2.0", "id":10, "method":"initialize",
+                            "params":{"clientInfo":{"name":"client-c","version":"0"}}
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(legacy_init.status(), StatusCode::OK);
-        let legacy_event = tokio::time::timeout(
-            std::time::Duration::from_secs(1), legacy_stream.next()
-        ).await.expect("legacy initialize SSE response timed out")
-            .expect("legacy SSE stream ended").expect("legacy SSE body error");
+        let legacy_event =
+            tokio::time::timeout(std::time::Duration::from_secs(1), legacy_stream.next())
+                .await
+                .expect("legacy initialize SSE response timed out")
+                .expect("legacy SSE stream ended")
+                .expect("legacy SSE body error");
         assert!(String::from_utf8_lossy(&legacy_event).contains("\"id\":10"));
         assert_eq!(
-            &*get_state().unwrap().sessions.lock().unwrap()
-                .get(&legacy_session).unwrap().session_agent_id.read().unwrap(),
+            &*get_state()
+                .unwrap()
+                .sessions
+                .lock()
+                .unwrap()
+                .get(&legacy_session)
+                .unwrap()
+                .session_agent_id
+                .read()
+                .unwrap(),
             "client-c"
         );
         drop(legacy_stream);
 
-        let subscribe = |session: &str| Request::builder()
-            .method("GET")
-            .uri(format!("/sse?session_id={session}"))
-            .body(Body::empty())
-            .unwrap();
-        let subscribe_header = |session: &str| Request::builder()
-            .method("GET")
-            .uri("/sse")
-            .header(MCP_SESSION_ID_HEADER, session)
-            .body(Body::empty())
-            .unwrap();
+        let subscribe = |session: &str| {
+            Request::builder()
+                .method("GET")
+                .uri(format!("/sse?session_id={session}"))
+                .body(Body::empty())
+                .unwrap()
+        };
+        let subscribe_header = |session: &str| {
+            Request::builder()
+                .method("GET")
+                .uri("/sse")
+                .header(MCP_SESSION_ID_HEADER, session)
+                .body(Body::empty())
+                .unwrap()
+        };
         let unknown_sse = build_transport_router(TransportMode::Sse, None)
-            .oneshot(subscribe_header("unknown-session")).await.unwrap();
+            .oneshot(subscribe_header("unknown-session"))
+            .await
+            .unwrap();
         assert_eq!(unknown_sse.status(), StatusCode::NOT_FOUND);
         let first_sse = build_transport_router(TransportMode::Sse, None)
-            .oneshot(subscribe_header(&first_session)).await.unwrap();
+            .oneshot(subscribe_header(&first_session))
+            .await
+            .unwrap();
         let duplicate_sse = build_transport_router(TransportMode::Sse, None)
-            .oneshot(subscribe(&first_session)).await.unwrap();
+            .oneshot(subscribe(&first_session))
+            .await
+            .unwrap();
         assert_eq!(duplicate_sse.status(), StatusCode::CONFLICT);
         let second_sse = build_transport_router(TransportMode::Sse, None)
-            .oneshot(subscribe(&second_session)).await.unwrap();
+            .oneshot(subscribe(&second_session))
+            .await
+            .unwrap();
         let mut first_stream = first_sse.into_body().into_data_stream();
         let mut second_stream = second_sse.into_body().into_data_stream();
         tokio::time::timeout(std::time::Duration::from_secs(1), first_stream.next())
-            .await.expect("first SSE endpoint event timed out");
+            .await
+            .expect("first SSE endpoint event timed out");
         tokio::time::timeout(std::time::Duration::from_secs(1), second_stream.next())
-            .await.expect("second SSE endpoint event timed out");
+            .await
+            .expect("second SSE endpoint event timed out");
 
-        let session_call = |id: u64, session: &str| Request::builder()
-            .method("POST")
-            .uri("/message")
-            .header(header::CONTENT_TYPE, "application/json")
-            .header(MCP_SESSION_ID_HEADER, session)
-            .body(Body::from(json!({
-                "jsonrpc":"2.0", "id":id, "method":"tools/list", "params":{}
-            }).to_string()))
+        let session_call = |id: u64, session: &str| {
+            Request::builder()
+                .method("POST")
+                .uri("/message")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(MCP_SESSION_ID_HEADER, session)
+                .body(Body::from(
+                    json!({
+                        "jsonrpc":"2.0", "id":id, "method":"tools/list", "params":{}
+                    })
+                    .to_string(),
+                ))
+                .unwrap()
+        };
+        router
+            .clone()
+            .oneshot(session_call(5, &first_session))
+            .await
             .unwrap();
-        router.clone().oneshot(session_call(5, &first_session)).await.unwrap();
-        let first_event = tokio::time::timeout(
-            std::time::Duration::from_secs(1), first_stream.next()
-        ).await.expect("first session SSE response timed out")
-            .expect("first SSE stream ended").expect("first SSE body error");
+        let first_event =
+            tokio::time::timeout(std::time::Duration::from_secs(1), first_stream.next())
+                .await
+                .expect("first session SSE response timed out")
+                .expect("first SSE stream ended")
+                .expect("first SSE body error");
         assert!(String::from_utf8_lossy(&first_event).contains("\"id\":5"));
-        assert!(tokio::time::timeout(
-            std::time::Duration::from_millis(100), second_stream.next()
-        ).await.is_err(), "second session received first session's response");
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(100), second_stream.next())
+                .await
+                .is_err(),
+            "second session received first session's response"
+        );
 
-        router.clone().oneshot(session_call(6, &second_session)).await.unwrap();
-        let second_event = tokio::time::timeout(
-            std::time::Duration::from_secs(1), second_stream.next()
-        ).await.expect("second session SSE response timed out")
-            .expect("second SSE stream ended").expect("second SSE body error");
+        router
+            .clone()
+            .oneshot(session_call(6, &second_session))
+            .await
+            .unwrap();
+        let second_event =
+            tokio::time::timeout(std::time::Duration::from_secs(1), second_stream.next())
+                .await
+                .expect("second session SSE response timed out")
+                .expect("second SSE stream ended")
+                .expect("second SSE body error");
         assert!(String::from_utf8_lossy(&second_event).contains("\"id\":6"));
-        assert!(tokio::time::timeout(
-            std::time::Duration::from_millis(100), first_stream.next()
-        ).await.is_err(), "first session received second session's response");
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(100), first_stream.next())
+                .await
+                .is_err(),
+            "first session received second session's response"
+        );
 
         for (id, session) in [(3, first_session), (4, second_session)] {
             let request = Request::builder()
@@ -843,15 +1017,23 @@ mod tests {
                 .uri("/message")
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(MCP_SESSION_ID_HEADER, session)
-                .body(Body::from(json!({
-                    "jsonrpc":"2.0", "id":id, "method":"tools/list", "params":{}
-                }).to_string()))
+                .body(Body::from(
+                    json!({
+                        "jsonrpc":"2.0", "id":id, "method":"tools/list", "params":{}
+                    })
+                    .to_string(),
+                ))
                 .unwrap();
             let response = router.clone().oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
-            let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
             let value: Value = serde_json::from_slice(&body).unwrap();
-            assert!(value.get("result").is_some(), "session {id} was not initialized: {value}");
+            assert!(
+                value.get("result").is_some(),
+                "session {id} was not initialized: {value}"
+            );
         }
 
         let _ = std::fs::remove_file(path);
@@ -881,12 +1063,7 @@ mod tests {
     /// saturation is a timing event, not a defect. A lock-error STORM (more
     /// than `LOCK_RETRY_CAP`), any non-lock error, or any acknowledged write
     /// that failed to persist is a real regression and never qualifies.
-    fn is_transient_lock_tail(
-        lock: u64,
-        other: u64,
-        persisted: i64,
-        ok_writes: u64,
-    ) -> bool {
+    fn is_transient_lock_tail(lock: u64, other: u64, persisted: i64, ok_writes: u64) -> bool {
         const LOCK_RETRY_CAP: u64 = 5;
         let cap = std::env::var("PERSEUS_VAULT_LOADTEST_LOCK_RETRY_CAP")
             .ok()
@@ -904,14 +1081,20 @@ mod tests {
             profile: ToolProfile::Default,
         };
         let (first_id, _) = registry.create_registered();
-        assert!(registry.get(&first_id).is_none(), "unready session was served");
+        assert!(
+            registry.get(&first_id).is_none(),
+            "unready session was served"
+        );
         assert!(registry.get_any(&first_id).is_some());
         assert!(registry.mark_ready(&first_id));
         assert!(registry.get(&first_id).is_some());
 
         registry.insert("second".into(), Arc::new(MCPState::new()), true);
         registry.insert("third".into(), Arc::new(MCPState::new()), true);
-        assert!(registry.get_any(&first_id).is_none(), "least-recent session was not evicted");
+        assert!(
+            registry.get_any(&first_id).is_none(),
+            "least-recent session was not evicted"
+        );
         assert!(registry.get("second").is_some());
         assert!(registry.get("third").is_some());
     }
@@ -950,7 +1133,10 @@ mod tests {
         use std::time::Instant;
 
         fn env_usize(key: &str, default: usize) -> usize {
-            std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+            std::env::var(key)
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(default)
         }
 
         // Classify one response body. A pooled-write/lock failure surfaces as an
@@ -964,13 +1150,14 @@ mod tests {
             is_write: bool,
         ) {
             let lower = text.to_lowercase();
-            let is_lock =
-                lower.contains("database is locked") || lower.contains("sqlite_busy");
+            let is_lock = lower.contains("database is locked") || lower.contains("sqlite_busy");
             let v: Value = serde_json::from_str(text).unwrap_or(Value::Null);
             let is_err = is_lock
                 || text.starts_with("TRANSPORT_ERROR")
                 || v.get("error").is_some()
-                || v.pointer("/result/isError").and_then(|b| b.as_bool()).unwrap_or(false);
+                || v.pointer("/result/isError")
+                    .and_then(|b| b.as_bool())
+                    .unwrap_or(false);
             if is_lock {
                 lock.fetch_add(1, Ordering::Relaxed);
             } else if is_err {
@@ -992,8 +1179,10 @@ mod tests {
         // router built below.)
         std::env::set_var("PERSEUS_VAULT_HTTP_RATE_PER_SEC", "0");
 
-        let path = std::env::temp_dir()
-            .join(format!("perseus_vault-loadtest-{}.db", uuid::Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!(
+            "perseus_vault-loadtest-{}.db",
+            uuid::Uuid::new_v4()
+        ));
         let path_str = path.to_str().unwrap().to_string();
         let db = Database::open(&path_str).expect("open load-test db");
         init_transport_state(Arc::new(db));
@@ -1025,139 +1214,160 @@ mod tests {
                 .to_string(),
             )
             .expect("initialize request failed");
-        let session_id = init.header("Mcp-Session-Id")
+        let session_id = init
+            .header("Mcp-Session-Id")
             .expect("initialize response missing Mcp-Session-Id")
             .to_string();
 
         // Run one full load pass and return its statistics. Parameterized by
         // category so a retry writes into its own partition and the per-attempt
         // durability count stays honest.
-        let run_load = |category: &'static str| -> (u64, u64, u64, i64, u64, std::time::Duration, Vec<u128>) {
-            let lock_errors = Arc::new(AtomicU64::new(0));
-            let other_errors = Arc::new(AtomicU64::new(0));
-            let writes_ok = Arc::new(AtomicU64::new(0));
+        let run_load =
+            |category: &'static str| -> (u64, u64, u64, i64, u64, std::time::Duration, Vec<u128>) {
+                let lock_errors = Arc::new(AtomicU64::new(0));
+                let other_errors = Arc::new(AtomicU64::new(0));
+                let writes_ok = Arc::new(AtomicU64::new(0));
 
-            let start = Instant::now();
-            let mut handles = Vec::new();
-            for c in 0..clients {
-                let base = base.clone();
-                let session_id = session_id.clone();
-                let lock_errors = Arc::clone(&lock_errors);
-                let other_errors = Arc::clone(&other_errors);
-                let writes_ok = Arc::clone(&writes_ok);
-                handles.push(std::thread::spawn(move || {
-                    let mut latencies: Vec<u128> = Vec::with_capacity(writes_per + 2 * reads_per);
-                    let call = |name: &str, args: serde_json::Value| -> (String, u128) {
-                        let t = Instant::now();
-                        let body = serde_json::json!({
-                            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                            "params": {"name": name, "arguments": args}
-                        });
-                        let text = match ureq::post(&base)
-                            .set("Content-Type", "application/json")
-                            .set("Mcp-Session-Id", &session_id)
-                            .set("MCP-Protocol-Version", "2025-06-18")
-                            .send_string(&body.to_string())
-                        {
-                            Ok(resp) => resp.into_string().unwrap_or_default(),
-                            Err(ureq::Error::Status(_, resp)) => {
-                                resp.into_string().unwrap_or_default()
-                            }
-                            Err(e) => format!("TRANSPORT_ERROR: {}", e),
+                let start = Instant::now();
+                let mut handles = Vec::new();
+                for c in 0..clients {
+                    let base = base.clone();
+                    let session_id = session_id.clone();
+                    let lock_errors = Arc::clone(&lock_errors);
+                    let other_errors = Arc::clone(&other_errors);
+                    let writes_ok = Arc::clone(&writes_ok);
+                    handles.push(std::thread::spawn(move || {
+                        let mut latencies: Vec<u128> =
+                            Vec::with_capacity(writes_per + 2 * reads_per);
+                        let call = |name: &str, args: serde_json::Value| -> (String, u128) {
+                            let t = Instant::now();
+                            let body = serde_json::json!({
+                                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                "params": {"name": name, "arguments": args}
+                            });
+                            let text = match ureq::post(&base)
+                                .set("Content-Type", "application/json")
+                                .set("Mcp-Session-Id", &session_id)
+                                .set("MCP-Protocol-Version", "2025-06-18")
+                                .send_string(&body.to_string())
+                            {
+                                Ok(resp) => resp.into_string().unwrap_or_default(),
+                                Err(ureq::Error::Status(_, resp)) => {
+                                    resp.into_string().unwrap_or_default()
+                                }
+                                Err(e) => format!("TRANSPORT_ERROR: {}", e),
+                            };
+                            (text, t.elapsed().as_micros())
                         };
-                        (text, t.elapsed().as_micros())
-                    };
 
-                    // Interleave writes and reads so the two contend on the pool.
-                    let ops = writes_per.max(reads_per);
-                    for i in 0..ops {
-                        if i < writes_per {
-                            // High-entropy unique content so each write is a real
-                            // create — perseus_vault_remember dedups bodies above 70% trigram
-                            // similarity, so near-identical payloads would collapse
-                            // and `persisted == issued` would no longer test durability.
-                            let nonce = format!(
-                                "{}{}",
-                                uuid::Uuid::new_v4().simple(),
-                                uuid::Uuid::new_v4().simple()
-                            );
-                            let (text, us) = call("perseus_vault_remember", serde_json::json!({
-                                "category": category,
-                                "key": format!("c{}-w{}", c, i),
-                                "body_json": format!("{{\"content\":\"{}\"}}", nonce),
-                            }));
-                            latencies.push(us);
-                            classify(&text, &lock_errors, &other_errors, &writes_ok, true);
+                        // Interleave writes and reads so the two contend on the pool.
+                        let ops = writes_per.max(reads_per);
+                        for i in 0..ops {
+                            if i < writes_per {
+                                // High-entropy unique content so each write is a real
+                                // create — perseus_vault_remember dedups bodies above 70% trigram
+                                // similarity, so near-identical payloads would collapse
+                                // and `persisted == issued` would no longer test durability.
+                                let nonce = format!(
+                                    "{}{}",
+                                    uuid::Uuid::new_v4().simple(),
+                                    uuid::Uuid::new_v4().simple()
+                                );
+                                let (text, us) = call(
+                                    "perseus_vault_remember",
+                                    serde_json::json!({
+                                        "category": category,
+                                        "key": format!("c{}-w{}", c, i),
+                                        "body_json": format!("{{\"content\":\"{}\"}}", nonce),
+                                    }),
+                                );
+                                latencies.push(us);
+                                classify(&text, &lock_errors, &other_errors, &writes_ok, true);
+                            }
+                            if i < reads_per {
+                                let (text, us) = call(
+                                    "perseus_vault_recall",
+                                    serde_json::json!({
+                                        "query": "client", "category": category, "limit": 10
+                                    }),
+                                );
+                                latencies.push(us);
+                                classify(&text, &lock_errors, &other_errors, &writes_ok, false);
+
+                                let (text2, us2) =
+                                    call("perseus_vault_context", serde_json::json!({}));
+                                latencies.push(us2);
+                                classify(&text2, &lock_errors, &other_errors, &writes_ok, false);
+                            }
                         }
-                        if i < reads_per {
-                            let (text, us) = call("perseus_vault_recall", serde_json::json!({
-                                "query": "client", "category": category, "limit": 10
-                            }));
-                            latencies.push(us);
-                            classify(&text, &lock_errors, &other_errors, &writes_ok, false);
-
-                            let (text2, us2) = call("perseus_vault_context", serde_json::json!({}));
-                            latencies.push(us2);
-                            classify(&text2, &lock_errors, &other_errors, &writes_ok, false);
-                        }
-                    }
-                    latencies
-                }));
-            }
-
-            let mut all: Vec<u128> = Vec::new();
-            for h in handles {
-                all.extend(h.join().expect("client thread panicked (possible deadlock)"));
-            }
-            let elapsed = start.elapsed();
-
-            all.sort_unstable();
-            let pct = |p: f64| -> u128 {
-                if all.is_empty() {
-                    return 0;
+                        latencies
+                    }));
                 }
-                let idx = (((all.len() - 1) as f64) * p).round() as usize;
-                all[idx]
-            };
-            let lock = lock_errors.load(Ordering::Relaxed);
-            let other = other_errors.load(Ordering::Relaxed);
-            let ok_writes = writes_ok.load(Ordering::Relaxed);
-            let issued_writes = (clients * writes_per) as u64;
 
-            // Independently verify no lost writes: reopen the file with a raw
-            // connection and count the rows that actually persisted.
-            let verify = rusqlite::Connection::open(&path_str)
-                .expect("reopen for verification");
-            let persisted: i64 = verify
-                .query_row(
-                    "SELECT COUNT(*) FROM entities WHERE category = ?1",
-                    [category],
-                    |r| r.get(0),
-                )
-                .unwrap();
-            drop(verify);
+                let mut all: Vec<u128> = Vec::new();
+                for h in handles {
+                    all.extend(
+                        h.join()
+                            .expect("client thread panicked (possible deadlock)"),
+                    );
+                }
+                let elapsed = start.elapsed();
 
-            eprintln!(
-                "\n#223 pool load test\n\
+                all.sort_unstable();
+                let pct = |p: f64| -> u128 {
+                    if all.is_empty() {
+                        return 0;
+                    }
+                    let idx = (((all.len() - 1) as f64) * p).round() as usize;
+                    all[idx]
+                };
+                let lock = lock_errors.load(Ordering::Relaxed);
+                let other = other_errors.load(Ordering::Relaxed);
+                let ok_writes = writes_ok.load(Ordering::Relaxed);
+                let issued_writes = (clients * writes_per) as u64;
+
+                // Independently verify no lost writes: reopen the file with a raw
+                // connection and count the rows that actually persisted.
+                let verify =
+                    rusqlite::Connection::open(&path_str).expect("reopen for verification");
+                let persisted: i64 = verify
+                    .query_row(
+                        "SELECT COUNT(*) FROM entities WHERE category = ?1",
+                        [category],
+                        |r| r.get(0),
+                    )
+                    .unwrap();
+                drop(verify);
+
+                eprintln!(
+                    "\n#223 pool load test\n\
                  clients={clients} writes/client={writes_per} reads/client={reads_per}\n\
                  pool max_size={} busy_timeout={}ms\n\
                  requests={} wall={:.2}s throughput={:.0} req/s\n\
                  latency p50={}us p99={}us max={}us\n\
                  lock_errors={lock} other_errors={other}\n\
                  writes: issued={issued_writes} ok={ok_writes} persisted={persisted}",
-                std::env::var("PERSEUS_VAULT_POOL_MAX_SIZE").unwrap_or_else(|_| "16".into()),
-                std::env::var("PERSEUS_VAULT_BUSY_TIMEOUT_MS").unwrap_or_else(|_| "5000".into()),
-                all.len(),
-                elapsed.as_secs_f64(),
-                all.len() as f64 / elapsed.as_secs_f64().max(1e-9),
-                pct(0.50),
-                pct(0.99),
-                all.last().copied().unwrap_or(0),
-            );
+                    std::env::var("PERSEUS_VAULT_POOL_MAX_SIZE").unwrap_or_else(|_| "16".into()),
+                    std::env::var("PERSEUS_VAULT_BUSY_TIMEOUT_MS")
+                        .unwrap_or_else(|_| "5000".into()),
+                    all.len(),
+                    elapsed.as_secs_f64(),
+                    all.len() as f64 / elapsed.as_secs_f64().max(1e-9),
+                    pct(0.50),
+                    pct(0.99),
+                    all.last().copied().unwrap_or(0),
+                );
 
-
-            (lock, other, ok_writes, persisted, issued_writes, elapsed, all)
-        };
+                (
+                    lock,
+                    other,
+                    ok_writes,
+                    persisted,
+                    issued_writes,
+                    elapsed,
+                    all,
+                )
+            };
 
         // #223's four properties are asserted strictly below on a single
         // measurement. A 32-client flood on a shared CI runner can exhaust the
@@ -1172,7 +1382,15 @@ mod tests {
             let (lock, other, ok_writes, persisted, issued_writes, elapsed, all) =
                 run_load("loadtest");
             if lock == 0 || !is_transient_lock_tail(lock, other, persisted, ok_writes) {
-                (lock, other, ok_writes, persisted, issued_writes, elapsed, all)
+                (
+                    lock,
+                    other,
+                    ok_writes,
+                    persisted,
+                    issued_writes,
+                    elapsed,
+                    all,
+                )
             } else {
                 eprintln!(
                     "\n#223 transient busy-timeout tail under saturation (lock_errors={lock});\n\
@@ -1185,7 +1403,10 @@ mod tests {
         let _ = std::fs::remove_file(&path_str);
 
         // The four properties #223 asks us to prove:
-        assert_eq!(lock, 0, "SQLITE_BUSY / 'database is locked' after busy_timeout");
+        assert_eq!(
+            lock, 0,
+            "SQLITE_BUSY / 'database is locked' after busy_timeout"
+        );
         assert_eq!(other, 0, "unexpected tool/transport errors under load");
         assert_eq!(
             persisted, issued_writes as i64,

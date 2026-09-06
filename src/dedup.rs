@@ -366,9 +366,30 @@ mod tests {
 
     fn random_body(rng: &mut XorShift, words: usize) -> String {
         const POOL: &[&str] = &[
-            "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel",
-            "india", "juliet", "kilo", "lima", "mike", "november", "oscar", "papa",
-            "café", "naïve", "日本語", "🌍", "Ω", "données", "vault", "perseus",
+            "alpha",
+            "bravo",
+            "charlie",
+            "delta",
+            "echo",
+            "foxtrot",
+            "golf",
+            "hotel",
+            "india",
+            "juliet",
+            "kilo",
+            "lima",
+            "mike",
+            "november",
+            "oscar",
+            "papa",
+            "café",
+            "naïve",
+            "日本語",
+            "🌍",
+            "Ω",
+            "données",
+            "vault",
+            "perseus",
         ];
         let mut s = String::from("{\"note\":\"");
         for _ in 0..words {
@@ -383,7 +404,10 @@ mod tests {
     fn packing_is_injective_and_cardinality_matches_reference() {
         let mut rng = XorShift::new(42);
         for _ in 0..200 {
-            let s = { let w = 1 + rng.below(60); random_body(&mut rng, w) };
+            let s = {
+                let w = 1 + rng.below(60);
+                random_body(&mut rng, w)
+            };
             let packed = packed_trigrams(&s);
             let reference = ref_trigrams(&s);
             assert_eq!(
@@ -404,11 +428,17 @@ mod tests {
     fn exact_jaccard_is_bitwise_equal_to_hashset_reference() {
         let mut rng = XorShift::new(7);
         for _ in 0..300 {
-            let a = { let w = 1 + rng.below(50); random_body(&mut rng, w) };
+            let a = {
+                let w = 1 + rng.below(50);
+                random_body(&mut rng, w)
+            };
             let b = if rng.below(3) == 0 {
                 a.clone() // identical
             } else {
-                { let w = 1 + rng.below(50); random_body(&mut rng, w) }
+                {
+                    let w = 1 + rng.below(50);
+                    random_body(&mut rng, w)
+                }
             };
             let got = exact_jaccard(&packed_trigrams(&a), &packed_trigrams(&b));
             let want = ref_overlap(&ref_trigrams(&a), &ref_trigrams(&b));
@@ -425,11 +455,17 @@ mod tests {
     fn sig_roundtrip_and_verdict_match_exact_jaccard() {
         let mut rng = XorShift::new(1234);
         for round in 0..300 {
-            let a = { let w = 1 + rng.below(50); random_body(&mut rng, w) };
+            let a = {
+                let w = 1 + rng.below(50);
+                random_body(&mut rng, w)
+            };
             let b = match rng.below(4) {
                 0 => a.clone(),
                 1 => format!("{a} extra tail"),
-                _ => { let w = 1 + rng.below(50); random_body(&mut rng, w) },
+                _ => {
+                    let w = 1 + rng.below(50);
+                    random_body(&mut rng, w)
+                }
             };
             let ta = packed_trigrams(&a);
             let tb = packed_trigrams(&b);
@@ -475,11 +511,17 @@ mod tests {
     fn histogram_ceiling_never_undercounts_intersection() {
         let mut rng = XorShift::new(99);
         for _ in 0..200 {
-            let a = { let w = 1 + rng.below(60); random_body(&mut rng, w) };
+            let a = {
+                let w = 1 + rng.below(60);
+                random_body(&mut rng, w)
+            };
             let b = if rng.below(2) == 0 {
                 format!("{a} shared suffix material")
             } else {
-                { let w = 1 + rng.below(60); random_body(&mut rng, w) }
+                {
+                    let w = 1 + rng.below(60);
+                    random_body(&mut rng, w)
+                }
             };
             let ta = packed_trigrams(&a);
             let tb = packed_trigrams(&b);

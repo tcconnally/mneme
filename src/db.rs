@@ -1103,10 +1103,7 @@ impl Database {
     /// encrypted form hashes each normalized term exactly as the protected
     /// index writer did; the plaintext form preserves the existing quoted
     /// prefix query semantics.
-    fn fts_query_from_words(
-        words: &[String],
-        encryption: Option<&EncryptionManager>,
-    ) -> String {
+    fn fts_query_from_words(words: &[String], encryption: Option<&EncryptionManager>) -> String {
         if let Some(enc) = encryption {
             return enc.blind_query_from_terms(words);
         }
@@ -1202,9 +1199,9 @@ impl Database {
                 crate::encryption::BodyDecrypt::LegacyPlaintext(_) => Err(format!(
                     "plaintext body found in encrypted store for {category}:{key}"
                 )),
-                crate::encryption::BodyDecrypt::AuthFailed(_) => Err(format!(
-                    "body authentication failed for {category}:{key}"
-                )),
+                crate::encryption::BodyDecrypt::AuthFailed(_) => {
+                    Err(format!("body authentication failed for {category}:{key}"))
+                }
             },
             None => Ok(raw.to_string()),
         }
@@ -1289,14 +1286,7 @@ impl Database {
             }
             let stored_body = new_body.as_deref().unwrap_or(&raw_body).to_string();
             let stored_hints = new_hints.as_deref().unwrap_or(&raw_hints).to_string();
-            live_updates.push((
-                rowid,
-                id,
-                raw_body,
-                stored_body,
-                raw_hints,
-                stored_hints,
-            ));
+            live_updates.push((rowid, id, raw_body, stored_body, raw_hints, stored_hints));
         }
 
         let history_rows: Vec<(i64, String, String, String, String)> = {
@@ -1386,10 +1376,7 @@ impl Database {
         // authenticates only under the pre-rebrand AAD.
         let canary_update = Self::prepare_canary_rekey(enc, &conn)?;
         if failed > 0 {
-            return Err(format!(
-                "AAD migration rejected {failed} unauthenticated rows"
-            )
-            .into());
+            return Err(format!("AAD migration rejected {failed} unauthenticated rows").into());
         }
 
         let tx = conn.unchecked_transaction()?;
@@ -1411,13 +1398,13 @@ impl Database {
                 params![new_body, rowid, old_body],
             )?;
             if updated != 1 {
-                return Err(format!("history row changed during AAD migration: {history_id}").into());
+                return Err(
+                    format!("history row changed during AAD migration: {history_id}").into(),
+                );
             }
         }
         for (table, id, old_body, new_body) in &quarantine_updates {
-            let sql = format!(
-                "UPDATE {table} SET body_json = ?1 WHERE id = ?2 AND body_json = ?3"
-            );
+            let sql = format!("UPDATE {table} SET body_json = ?1 WHERE id = ?2 AND body_json = ?3");
             let updated = tx.execute(&sql, params![new_body, id, old_body])?;
             if updated != 1 {
                 return Err(format!("{table} row changed during AAD migration: {id}").into());
@@ -1435,7 +1422,12 @@ impl Database {
         }
         tx.commit()?;
         let migrated = live_updates.len() + history_updates.len() + quarantine_updates.len();
-        Ok((migrated, already_current, 0, canary_update.is_some() as usize))
+        Ok((
+            migrated,
+            already_current,
+            0,
+            canary_update.is_some() as usize,
+        ))
     }
 
     fn reencrypt_aad_field_with_fallbacks(
@@ -1553,9 +1545,8 @@ impl Database {
             mapped.collect::<rusqlite::Result<Vec<_>>>()?
         };
         let write_quarantine_rows: Vec<(String, String, String, String)> = {
-            let mut stmt = conn.prepare(
-                "SELECT id, category, key, body_json FROM write_quarantine",
-            )?;
+            let mut stmt =
+                conn.prepare("SELECT id, category, key, body_json FROM write_quarantine")?;
             let mapped = stmt.query_map([], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
@@ -1567,9 +1558,8 @@ impl Database {
             mapped.collect::<rusqlite::Result<Vec<_>>>()?
         };
         let admission_quarantine_rows: Vec<(String, String, String, String)> = {
-            let mut stmt = conn.prepare(
-                "SELECT id, category, key, body_json FROM admission_quarantine",
-            )?;
+            let mut stmt =
+                conn.prepare("SELECT id, category, key, body_json FROM admission_quarantine")?;
             let mapped = stmt.query_map([], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
@@ -1592,20 +1582,19 @@ impl Database {
 
         for (rowid, id, category, key, raw_body, raw_hints) in live_rows {
             let aad = Self::build_aad(&category, &key);
-            let (body, body_changed) = match Self::decrypt_body_with_legacy_fallback(
-                enc, &raw_body, &category, &key,
-            ) {
-                crate::encryption::BodyDecrypt::Plaintext(_) => (raw_body.clone(), false),
-                crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => (
-                    enc.encrypt(&plain, aad.as_bytes())
-                        .map_err(|e| format!("encrypt body for {category}:{key}: {e}"))?,
-                    true,
-                ),
-                crate::encryption::BodyDecrypt::AuthFailed(_) => {
-                    failed += 1;
-                    continue;
-                }
-            };
+            let (body, body_changed) =
+                match Self::decrypt_body_with_legacy_fallback(enc, &raw_body, &category, &key) {
+                    crate::encryption::BodyDecrypt::Plaintext(_) => (raw_body.clone(), false),
+                    crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => (
+                        enc.encrypt(&plain, aad.as_bytes())
+                            .map_err(|e| format!("encrypt body for {category}:{key}: {e}"))?,
+                        true,
+                    ),
+                    crate::encryption::BodyDecrypt::AuthFailed(_) => {
+                        failed += 1;
+                        continue;
+                    }
+                };
             let (hints, hints_changed) =
                 match Self::decrypt_body_with_legacy_fallback(enc, &raw_hints, &category, &key) {
                     crate::encryption::BodyDecrypt::Plaintext(_) => (raw_hints.clone(), false),
@@ -1620,14 +1609,7 @@ impl Database {
                     }
                 };
             if body_changed || hints_changed {
-                live_updates.push((
-                    rowid,
-                    id,
-                    raw_body,
-                    body,
-                    raw_hints,
-                    hints,
-                ));
+                live_updates.push((rowid, id, raw_body, body, raw_hints, hints));
             } else {
                 skipped += 1;
             }
@@ -1674,10 +1656,9 @@ impl Database {
         }
 
         if failed > 0 {
-            return Err(format!(
-                "encryption migration rejected {failed} unauthenticated rows"
-            )
-            .into());
+            return Err(
+                format!("encryption migration rejected {failed} unauthenticated rows").into(),
+            );
         }
 
         let changed = live_updates.len()
@@ -1713,7 +1694,10 @@ impl Database {
                 params![new_body, id, old_body],
             )?;
             if updated != 1 {
-                return Err(format!("write quarantine row changed during encryption migration: {id}").into());
+                return Err(format!(
+                    "write quarantine row changed during encryption migration: {id}"
+                )
+                .into());
             }
         }
         for (id, old_body, new_body) in &admission_quarantine_updates {
@@ -1722,7 +1706,10 @@ impl Database {
                 params![new_body, id, old_body],
             )?;
             if updated != 1 {
-                return Err(format!("admission quarantine row changed during encryption migration: {id}").into());
+                return Err(format!(
+                    "admission quarantine row changed during encryption migration: {id}"
+                )
+                .into());
             }
         }
         // Keep canonical bodies and both FTS shadow tables in one logical
@@ -1804,9 +1791,8 @@ impl Database {
             rows.collect::<rusqlite::Result<Vec<_>>>()?
         };
         {
-            let mut insert = tx.prepare(
-                "INSERT INTO entity_history_fts (rowid, body_json) VALUES (?1, ?2)",
-            )?;
+            let mut insert =
+                tx.prepare("INSERT INTO entity_history_fts (rowid, body_json) VALUES (?1, ?2)")?;
             for (rowid, category, key, raw_body) in history_rows {
                 let plain = match Self::decrypt_body_with_aad_fallback(
                     enc, &raw_body, &category, &key,
@@ -1887,7 +1873,10 @@ impl Database {
                     crate::encryption::BodyDecrypt::Plaintext(s)
                     | crate::encryption::BodyDecrypt::LegacyPlaintext(s) => s,
                     crate::encryption::BodyDecrypt::AuthFailed(_) => {
-                        return Err(format!("cannot update {category}:{key}: body authentication failed").into())
+                        return Err(format!(
+                            "cannot update {category}:{key}: body authentication failed"
+                        )
+                        .into())
                     }
                 }
             } else {
@@ -1903,14 +1892,11 @@ impl Database {
         } else {
             body_json.to_string()
         };
-        let (hints, stored_hints): (Vec<String>, String) =
-            if let Some(enc) = self.encryption.as_ref() {
-                let plaintext = match Self::decrypt_body_with_aad_fallback(
-                    enc,
-                    &raw_hints,
-                    &category,
-                    &key,
-                ) {
+        let (hints, stored_hints): (Vec<String>, String) = if let Some(enc) =
+            self.encryption.as_ref()
+        {
+            let plaintext =
+                match Self::decrypt_body_with_aad_fallback(enc, &raw_hints, &category, &key) {
                     crate::encryption::BodyDecrypt::Plaintext(s)
                     | crate::encryption::BodyDecrypt::LegacyPlaintext(s) => s,
                     crate::encryption::BodyDecrypt::AuthFailed(_) => {
@@ -1920,27 +1906,25 @@ impl Database {
                         .into())
                     }
                 };
-                let hints = serde_json::from_str(&plaintext).map_err(|e| {
-                    format!("cannot update {category}:{key}: invalid hints JSON: {e}")
-                })?;
-                let legacy_length_aad = Self::legacy_length_prefixed_aad(&category, &key);
-                let legacy_aad = Self::legacy_aad(&category, &key);
-                let stored = match Self::reencrypt_aad_field_with_fallbacks(
-                    enc,
-                    &raw_hints,
-                    &aad,
-                    &[legacy_length_aad.as_str(), legacy_aad.as_str()],
-                )? {
-                    Some(value) => value,
-                    None => raw_hints.clone(),
-                };
-                (hints, stored)
-            } else {
-                let hints = serde_json::from_str(&raw_hints).map_err(|e| {
-                    format!("cannot update {category}:{key}: invalid hints JSON: {e}")
-                })?;
-                (hints, raw_hints.clone())
+            let hints = serde_json::from_str(&plaintext)
+                .map_err(|e| format!("cannot update {category}:{key}: invalid hints JSON: {e}"))?;
+            let legacy_length_aad = Self::legacy_length_prefixed_aad(&category, &key);
+            let legacy_aad = Self::legacy_aad(&category, &key);
+            let stored = match Self::reencrypt_aad_field_with_fallbacks(
+                enc,
+                &raw_hints,
+                &aad,
+                &[legacy_length_aad.as_str(), legacy_aad.as_str()],
+            )? {
+                Some(value) => value,
+                None => raw_hints.clone(),
             };
+            (hints, stored)
+        } else {
+            let hints = serde_json::from_str(&raw_hints)
+                .map_err(|e| format!("cannot update {category}:{key}: invalid hints JSON: {e}"))?;
+            (hints, raw_hints.clone())
+        };
         let new_archived = archive.map(|(value, _)| value).unwrap_or(archived != 0);
         let tx = conn.unchecked_transaction()?;
         let updated = if let Some((archived, reason)) = archive {
@@ -1975,11 +1959,8 @@ impl Database {
                 params![id],
             )?;
         } else {
-            let indexed = Self::fts_indexed_text_for_storage(
-                body_json,
-                &hints,
-                self.encryption.as_ref(),
-            );
+            let indexed =
+                Self::fts_indexed_text_for_storage(body_json, &hints, self.encryption.as_ref());
             tx.execute(
                 "INSERT OR REPLACE INTO entities_fts (rowid, body_json)\n                 VALUES ((SELECT rowid FROM entities WHERE id = ?1), ?2)",
                 params![id, indexed],
@@ -2562,28 +2543,30 @@ impl Database {
         let mut live_updates = Vec::with_capacity(live_rows.len());
         for (rowid, id, category, key, raw_body, raw_hints) in live_rows {
             let aad = Self::build_aad(&category, &key);
-            let body = match Self::decrypt_body_with_legacy_fallback(&old, &raw_body, &category, &key) {
-                crate::encryption::BodyDecrypt::Plaintext(plain)
-                | crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => plain,
-                crate::encryption::BodyDecrypt::AuthFailed(error) => {
-                    return Err(format!(
-                        "old key cannot authenticate entity {category}:{key}: {error}"
-                    ));
-                }
-            };
-            let hints = match Self::decrypt_body_with_legacy_fallback(&old, &raw_hints, &category, &key) {
-                crate::encryption::BodyDecrypt::Plaintext(plain)
-                | crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => {
-                    serde_json::from_str::<Vec<String>>(&plain).map_err(|error| {
-                        format!("entity hints are invalid for {category}:{key}: {error}")
-                    })?
-                }
-                crate::encryption::BodyDecrypt::AuthFailed(error) => {
-                    return Err(format!(
-                        "old key cannot authenticate hints for {category}:{key}: {error}"
-                    ));
-                }
-            };
+            let body =
+                match Self::decrypt_body_with_legacy_fallback(&old, &raw_body, &category, &key) {
+                    crate::encryption::BodyDecrypt::Plaintext(plain)
+                    | crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => plain,
+                    crate::encryption::BodyDecrypt::AuthFailed(error) => {
+                        return Err(format!(
+                            "old key cannot authenticate entity {category}:{key}: {error}"
+                        ));
+                    }
+                };
+            let hints =
+                match Self::decrypt_body_with_legacy_fallback(&old, &raw_hints, &category, &key) {
+                    crate::encryption::BodyDecrypt::Plaintext(plain)
+                    | crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => {
+                        serde_json::from_str::<Vec<String>>(&plain).map_err(|error| {
+                            format!("entity hints are invalid for {category}:{key}: {error}")
+                        })?
+                    }
+                    crate::encryption::BodyDecrypt::AuthFailed(error) => {
+                        return Err(format!(
+                            "old key cannot authenticate hints for {category}:{key}: {error}"
+                        ));
+                    }
+                };
             let new_body = new.encrypt(&body, aad.as_bytes())?;
             let new_hints = new.encrypt(
                 &serde_json::to_string(&hints).map_err(|error| error.to_string())?,
@@ -2594,36 +2577,32 @@ impl Database {
 
         let mut history_updates = Vec::with_capacity(history_rows.len());
         for (rowid, history_id, category, key, raw_body) in history_rows {
-            let body = match Self::decrypt_body_with_legacy_fallback(&old, &raw_body, &category, &key) {
-                crate::encryption::BodyDecrypt::Plaintext(plain)
-                | crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => plain,
-                crate::encryption::BodyDecrypt::AuthFailed(error) => {
-                    return Err(format!(
-                        "old key cannot authenticate history row {history_id}: {error}"
-                    ));
-                }
-            };
-            let new_body = new.encrypt(
-                &body,
-                Self::build_aad(&category, &key).as_bytes(),
-            )?;
+            let body =
+                match Self::decrypt_body_with_legacy_fallback(&old, &raw_body, &category, &key) {
+                    crate::encryption::BodyDecrypt::Plaintext(plain)
+                    | crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => plain,
+                    crate::encryption::BodyDecrypt::AuthFailed(error) => {
+                        return Err(format!(
+                            "old key cannot authenticate history row {history_id}: {error}"
+                        ));
+                    }
+                };
+            let new_body = new.encrypt(&body, Self::build_aad(&category, &key).as_bytes())?;
             history_updates.push((rowid, history_id, raw_body, new_body));
         }
         let mut quarantine_updates: Vec<(String, String, String, String)> = Vec::new();
         for (table, id, category, key, raw_body) in quarantine_rows {
-            let body = match Self::decrypt_body_with_legacy_fallback(&old, &raw_body, &category, &key) {
-                crate::encryption::BodyDecrypt::Plaintext(plain)
-                | crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => plain,
-                crate::encryption::BodyDecrypt::AuthFailed(error) => {
-                    return Err(format!(
-                        "old key cannot authenticate {table} row {category}:{key}: {error}"
-                    ));
-                }
-            };
-            let new_body = new.encrypt(
-                &body,
-                Self::build_aad(&category, &key).as_bytes(),
-            )?;
+            let body =
+                match Self::decrypt_body_with_legacy_fallback(&old, &raw_body, &category, &key) {
+                    crate::encryption::BodyDecrypt::Plaintext(plain)
+                    | crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => plain,
+                    crate::encryption::BodyDecrypt::AuthFailed(error) => {
+                        return Err(format!(
+                            "old key cannot authenticate {table} row {category}:{key}: {error}"
+                        ));
+                    }
+                };
+            let new_body = new.encrypt(&body, Self::build_aad(&category, &key).as_bytes())?;
             quarantine_updates.push((table, id, raw_body, new_body));
         }
 
@@ -2654,7 +2633,9 @@ impl Database {
                 )
                 .map_err(|e| e.to_string())?;
             if updated != 1 {
-                return Err(format!("history row changed during key rotation: {history_id}"));
+                return Err(format!(
+                    "history row changed during key rotation: {history_id}"
+                ));
             }
         }
         for (table, id, old_body, new_body) in &quarantine_updates {
@@ -2678,7 +2659,8 @@ impl Database {
 
         self.encryption = Some(new);
         self.secure_reclaim_storage().map_err(|e| e.to_string())?;
-        self.activate_encryption_markers().map_err(|e| e.to_string())?;
+        self.activate_encryption_markers()
+            .map_err(|e| e.to_string())?;
         Ok((live_updates.len(), history_updates.len()))
     }
 
@@ -2768,7 +2750,10 @@ impl Database {
                     // Accept all supported historical forms before accepting
                     // the key; a wrong key must fail under every form.
                     for (label, legacy_aad) in [
-                        ("legacy current-namespace", Self::legacy_current_namespace_canary_aad()),
+                        (
+                            "legacy current-namespace",
+                            Self::legacy_current_namespace_canary_aad(),
+                        ),
                         ("pre-rebrand", Self::legacy_canary_aad()),
                         ("earliest pre-rebrand", Self::legacy_bare_canary_aad()),
                     ] {
@@ -2873,10 +2858,10 @@ impl Database {
             .encrypt(Self::CANARY_MARKER, Self::canary_aad().as_bytes())
             .map_err(|e| format!("could not create encryption canary: {e}"))?;
         let conn = self.conn().map_err(|e| e.to_string())?;
-        let canonical_incomplete = Self::protected_canonical_storage_incomplete(&conn)
-            .map_err(|e| e.to_string())?;
-        let fts_incomplete = Self::protected_fts_storage_incomplete(&conn)
-            .map_err(|e| e.to_string())?;
+        let canonical_incomplete =
+            Self::protected_canonical_storage_incomplete(&conn).map_err(|e| e.to_string())?;
+        let fts_incomplete =
+            Self::protected_fts_storage_incomplete(&conn).map_err(|e| e.to_string())?;
         if canonical_incomplete || fts_incomplete {
             return Err(
                 "cannot activate protected encryption markers: canonical or FTS coverage is incomplete"
@@ -3014,8 +2999,7 @@ impl Database {
                 let value = value?;
                 if value.trim().is_empty()
                     || value.split_whitespace().any(|token| {
-                        token.len() != 64
-                            || !token.bytes().all(|byte| byte.is_ascii_hexdigit())
+                        token.len() != 64 || !token.bytes().all(|byte| byte.is_ascii_hexdigit())
                     })
                 {
                     return Ok(true);
@@ -3050,14 +3034,27 @@ impl Database {
         for row in rows {
             let (rowid, category, key, raw_body, raw_hints, archived) =
                 row.map_err(|error| format!("canonical payload scan failed: {error}"))?;
-            let body = match enc.decrypt_body(&raw_body, Self::build_aad(&category, &key).as_bytes()) {
-                crate::encryption::BodyDecrypt::Plaintext(plain) => plain,
-                _ => return Err(format!("canonical body authentication failed for {category}:{key}")),
-            };
-            let hints = match enc.decrypt_body(&raw_hints, Self::build_aad(&category, &key).as_bytes()) {
-                crate::encryption::BodyDecrypt::Plaintext(plain) => serde_json::from_str::<Vec<String>>(&plain)
-                    .map_err(|_| format!("canonical hints are invalid for {category}:{key}"))?,
-                _ => return Err(format!("canonical hints authentication failed for {category}:{key}")),
+            let body =
+                match enc.decrypt_body(&raw_body, Self::build_aad(&category, &key).as_bytes()) {
+                    crate::encryption::BodyDecrypt::Plaintext(plain) => plain,
+                    _ => {
+                        return Err(format!(
+                            "canonical body authentication failed for {category}:{key}"
+                        ))
+                    }
+                };
+            let hints = match enc
+                .decrypt_body(&raw_hints, Self::build_aad(&category, &key).as_bytes())
+            {
+                crate::encryption::BodyDecrypt::Plaintext(plain) => {
+                    serde_json::from_str::<Vec<String>>(&plain)
+                        .map_err(|_| format!("canonical hints are invalid for {category}:{key}"))?
+                }
+                _ => {
+                    return Err(format!(
+                        "canonical hints authentication failed for {category}:{key}"
+                    ))
+                }
             };
             if archived == 0 {
                 let stored: Option<String> = conn
@@ -3067,10 +3064,14 @@ impl Database {
                         |row| row.get(0),
                     )
                     .optional()
-                    .map_err(|error| format!("live FTS lookup failed for {category}:{key}: {error}"))?;
+                    .map_err(|error| {
+                        format!("live FTS lookup failed for {category}:{key}: {error}")
+                    })?;
                 let expected = Self::fts_indexed_text_for_storage(&body, &hints, Some(enc));
                 if stored.as_deref() != Some(expected.as_str()) {
-                    return Err(format!("live FTS authentication failed for {category}:{key}"));
+                    return Err(format!(
+                        "live FTS authentication failed for {category}:{key}"
+                    ));
                 }
             }
         }
@@ -3091,10 +3092,15 @@ impl Database {
         for row in rows {
             let (rowid, category, key, raw_body) =
                 row.map_err(|error| format!("history payload scan failed: {error}"))?;
-            let body = match enc.decrypt_body(&raw_body, Self::build_aad(&category, &key).as_bytes()) {
-                crate::encryption::BodyDecrypt::Plaintext(plain) => plain,
-                _ => return Err(format!("history body authentication failed for {category}:{key}")),
-            };
+            let body =
+                match enc.decrypt_body(&raw_body, Self::build_aad(&category, &key).as_bytes()) {
+                    crate::encryption::BodyDecrypt::Plaintext(plain) => plain,
+                    _ => {
+                        return Err(format!(
+                            "history body authentication failed for {category}:{key}"
+                        ))
+                    }
+                };
             let stored: Option<String> = conn
                 .query_row(
                     "SELECT body_json FROM entity_history_fts WHERE rowid = ?1",
@@ -3102,10 +3108,14 @@ impl Database {
                     |row| row.get(0),
                 )
                 .optional()
-                .map_err(|error| format!("history FTS lookup failed for {category}:{key}: {error}"))?;
+                .map_err(|error| {
+                    format!("history FTS lookup failed for {category}:{key}: {error}")
+                })?;
             let expected = Self::fts_indexed_text_for_storage(&body, &[], Some(enc));
             if stored.as_deref() != Some(expected.as_str()) {
-                return Err(format!("history FTS authentication failed for {category}:{key}"));
+                return Err(format!(
+                    "history FTS authentication failed for {category}:{key}"
+                ));
             }
         }
         for table in ["write_quarantine", "admission_quarantine"] {
@@ -3129,7 +3139,9 @@ impl Database {
                     enc.decrypt_body(&raw_body, Self::build_aad(&category, &key).as_bytes()),
                     crate::encryption::BodyDecrypt::Plaintext(_)
                 ) {
-                    return Err(format!("{table} body authentication failed for {category}:{key}"));
+                    return Err(format!(
+                        "{table} body authentication failed for {category}:{key}"
+                    ));
                 }
             }
         }
@@ -3163,7 +3175,7 @@ impl Database {
             return Err("protected FTS coverage or token shape is incomplete".into());
         }
         Self::verify_current_encryption_payloads(conn, enc)
-            .map_err(|error| format!("protected FTS authentication failed: {error}" ).into())
+            .map_err(|error| format!("protected FTS authentication failed: {error}").into())
     }
 
     /// Describes the encryption state of the database on **disk** (independent of
@@ -3197,7 +3209,9 @@ impl Database {
         // ciphertext heuristic below — the documented "plaintext" /
         // "mixed-legacy" path.
         let has_canary: bool = conn
-            .prepare("SELECT COUNT(*) FROM encryption_canary WHERE id = 1 AND length(ciphertext) > 0")
+            .prepare(
+                "SELECT COUNT(*) FROM encryption_canary WHERE id = 1 AND length(ciphertext) > 0",
+            )
             .and_then(|mut s| s.query_row([], |r| r.get::<_, i64>(0)))
             .map(|c| c > 0)
             .unwrap_or(false);
@@ -3206,8 +3220,8 @@ impl Database {
             // not prove that a failed/interrupted migration encrypted every
             // canonical row or rebuilt either FTS shadow table. Inspect the
             // on-disk shapes without attempting to decrypt or exposing values.
-            let canonical_mixed = Self::protected_canonical_storage_incomplete(&conn)
-                .unwrap_or(true);
+            let canonical_mixed =
+                Self::protected_canonical_storage_incomplete(&conn).unwrap_or(true);
             if canonical_mixed {
                 return "mixed-legacy".to_string();
             }
@@ -4018,13 +4032,7 @@ impl Database {
         embedding: &[f32],
         quant: EmbeddingQuant,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        Self::store_embedding_guarded_with_conn_indexed(
-            conn,
-            id,
-            embedding,
-            quant,
-            plaintext,
-        )
+        Self::store_embedding_guarded_with_conn_indexed(conn, id, embedding, quant, plaintext)
     }
 
     fn store_embedding_guarded_with_conn_indexed(
@@ -5312,35 +5320,37 @@ impl Database {
                 // scheme matches), index an empty body rather than the
                 // ciphertext: putting ciphertext into the FTS index would both
                 // leak it and corrupt search.
-                let plain =
-                    match Self::decrypt_body_with_aad_fallback(enc, &raw_body, &category, &key) {
-                        crate::encryption::BodyDecrypt::Plaintext(s)
-                        | crate::encryption::BodyDecrypt::LegacyPlaintext(s) => s,
-                        crate::encryption::BodyDecrypt::AuthFailed(e) => {
-                            return Err(format!(
+                let plain = match Self::decrypt_body_with_aad_fallback(
+                    enc, &raw_body, &category, &key,
+                ) {
+                    crate::encryption::BodyDecrypt::Plaintext(s)
+                    | crate::encryption::BodyDecrypt::LegacyPlaintext(s) => s,
+                    crate::encryption::BodyDecrypt::AuthFailed(e) => {
+                        return Err(format!(
                                 "protected FTS reindex cannot authenticate entity {category}:{key}: {e}"
                             )
                             .into());
-                        }
-                    };
+                    }
+                };
                 // Hints are part of the protected searchable payload. Never
                 // silently omit them on an authentication failure: doing so
                 // would advertise a repaired index while hiding tampering.
-                let hints: Vec<String> =
-                    match Self::decrypt_body_with_aad_fallback(enc, &raw_hints, &category, &key) {
-                        crate::encryption::BodyDecrypt::Plaintext(s)
-                        | crate::encryption::BodyDecrypt::LegacyPlaintext(s) => {
-                            serde_json::from_str(&s).map_err(|error| {
-                                format!("protected FTS hints are invalid for {category}:{key}: {error}")
-                            })?
-                        }
-                        crate::encryption::BodyDecrypt::AuthFailed(e) => {
-                            return Err(format!(
+                let hints: Vec<String> = match Self::decrypt_body_with_aad_fallback(
+                    enc, &raw_hints, &category, &key,
+                ) {
+                    crate::encryption::BodyDecrypt::Plaintext(s)
+                    | crate::encryption::BodyDecrypt::LegacyPlaintext(s) => {
+                        serde_json::from_str(&s).map_err(|error| {
+                            format!("protected FTS hints are invalid for {category}:{key}: {error}")
+                        })?
+                    }
+                    crate::encryption::BodyDecrypt::AuthFailed(e) => {
+                        return Err(format!(
                                 "protected FTS reindex cannot authenticate hints for {category}:{key}: {e}"
                             )
                             .into());
-                        }
-                    };
+                    }
+                };
                 insert.execute(params![
                     rowid,
                     Self::fts_indexed_text_for_storage(&plain, &hints, Some(enc)),
@@ -5407,17 +5417,18 @@ impl Database {
             let mut insert =
                 tx.prepare("INSERT INTO entity_history_fts (rowid, body_json) VALUES (?1, ?2)")?;
             for (rowid, category, key, raw_body) in rows {
-                let plain =
-                    match Self::decrypt_body_with_aad_fallback(enc, &raw_body, &category, &key) {
-                        crate::encryption::BodyDecrypt::Plaintext(s)
-                        | crate::encryption::BodyDecrypt::LegacyPlaintext(s) => s,
-                        crate::encryption::BodyDecrypt::AuthFailed(e) => {
-                            return Err(format!(
+                let plain = match Self::decrypt_body_with_aad_fallback(
+                    enc, &raw_body, &category, &key,
+                ) {
+                    crate::encryption::BodyDecrypt::Plaintext(s)
+                    | crate::encryption::BodyDecrypt::LegacyPlaintext(s) => s,
+                    crate::encryption::BodyDecrypt::AuthFailed(e) => {
+                        return Err(format!(
                                 "protected history FTS reindex cannot authenticate {category}:{key}: {e}"
                             )
                             .into());
-                        }
-                    };
+                    }
+                };
                 insert.execute(params![
                     rowid,
                     Self::fts_indexed_text_for_storage(&plain, &[], Some(enc)),
@@ -5459,11 +5470,10 @@ impl Database {
         self.ensure_embed_queue_drained()?;
         let conn = self.conn()?;
         let checkpoint = |conn: &rusqlite::Connection| -> Result<(), Box<dyn std::error::Error>> {
-            let (busy, log_frames, checkpointed): (i64, i64, i64) = conn.query_row(
-                "PRAGMA wal_checkpoint(TRUNCATE)",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-            )?;
+            let (busy, log_frames, checkpointed): (i64, i64, i64) =
+                conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                })?;
             if busy != 0 || log_frames != checkpointed {
                 return Err(format!(
                     "SQLite checkpoint incomplete: busy={busy}, log_frames={log_frames}, checkpointed={checkpointed}"
@@ -5510,8 +5520,7 @@ impl Database {
         }
         let source_conn = rusqlite::Connection::open_with_flags(
             source,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
-                | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
         source_conn.query_row("SELECT COUNT(*) FROM sqlite_master", [], |row| {
             row.get::<_, i64>(0)
@@ -5679,7 +5688,9 @@ impl Database {
             let restored_check: String =
                 restored_conn.query_row("PRAGMA quick_check", [], |row| row.get(0))?;
             if restored_check != "ok" {
-                return Err(format!("restored database quick_check failed: {restored_check}").into());
+                return Err(
+                    format!("restored database quick_check failed: {restored_check}").into(),
+                );
             }
             drop(restored_conn);
             if has_overlay {
@@ -9037,10 +9048,7 @@ impl Database {
             if e_cat != category || e_ws != workspace_hash {
                 // The entity moved scope; re-home its signature and move on —
                 // it is not a candidate for THIS scope.
-                repair.push((
-                    cand_id,
-                    crate::dedup::build_row_signature(body.as_ref()),
-                ));
+                repair.push((cand_id, crate::dedup::build_row_signature(body.as_ref())));
                 continue;
             }
             let fresh = sig_body_len == body.len() as i64
@@ -9053,12 +9061,7 @@ impl Database {
                     cand_id.clone(),
                     crate::dedup::build_row_signature(body.as_ref()),
                 ));
-                if Self::dedup_verdict_from_body(
-                    &target,
-                    a as f64,
-                    body.as_ref(),
-                    threshold,
-                ) {
+                if Self::dedup_verdict_from_body(&target, a as f64, body.as_ref(), threshold) {
                     found = Some(cand_id);
                     break 'scan;
                 }
@@ -9839,9 +9842,7 @@ impl Database {
                 .optional()?
                 .unwrap_or_default(),
         };
-        Self::value_suppressed_with_connections(
-            conn, overlay, &workspace, category, body, now,
-        )
+        Self::value_suppressed_with_connections(conn, overlay, &workspace, category, body, now)
     }
 
     /// Follow derived provenance to the source rows and suppress a derived
@@ -9872,29 +9873,32 @@ impl Database {
                     "SELECT category, key, body_json, COALESCE(workspace_hash, ''), links
                      FROM entities WHERE id = ?1",
                     params![source_id],
-                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+                    |row| {
+                        Ok((
+                            row.get(0)?,
+                            row.get(1)?,
+                            row.get(2)?,
+                            row.get(3)?,
+                            row.get(4)?,
+                        ))
+                    },
                 )
                 .optional()?;
             let Some((category, key, raw_body, workspace, links_json)) = row else {
                 continue;
             };
             let body = match self.encryption.as_ref() {
-                Some(enc) => match Self::decrypt_body_with_aad_fallback(
-                    enc, &raw_body, &category, &key,
-                ) {
-                    crate::encryption::BodyDecrypt::Plaintext(body)
-                    | crate::encryption::BodyDecrypt::LegacyPlaintext(body) => body,
-                    crate::encryption::BodyDecrypt::AuthFailed(_) => return Ok(true),
-                },
+                Some(enc) => {
+                    match Self::decrypt_body_with_aad_fallback(enc, &raw_body, &category, &key) {
+                        crate::encryption::BodyDecrypt::Plaintext(body)
+                        | crate::encryption::BodyDecrypt::LegacyPlaintext(body) => body,
+                        crate::encryption::BodyDecrypt::AuthFailed(_) => return Ok(true),
+                    }
+                }
                 None => raw_body,
             };
             if Self::value_suppressed_with_connections(
-                conn,
-                overlay,
-                &workspace,
-                &category,
-                &body,
-                now,
+                conn, overlay, &workspace, &category, &body, now,
             )? {
                 return Ok(true);
             }
@@ -10322,12 +10326,7 @@ impl Database {
         if self.primary_entity_suppressed_with_conn(conn, entity, now)? {
             return Ok(true);
         }
-        self.derived_lineage_suppressed_with_connections(
-            conn,
-            overlay.as_ref(),
-            entity,
-            now,
-        )
+        self.derived_lineage_suppressed_with_connections(conn, overlay.as_ref(), entity, now)
     }
 
     /// #882: like `filter_suppressed` but for scored candidates (bm25 /
@@ -11446,11 +11445,14 @@ impl Database {
                     tx.execute(
                         "INSERT OR REPLACE INTO entities_fts (rowid, body_json)
                          VALUES ((SELECT rowid FROM entities WHERE id = ?2), ?1)",
-                        params![Self::fts_indexed_text_for_storage(
-                            &effective_body,
-                            &entity.hints,
-                            self.encryption.as_ref(),
-                        ), id],
+                        params![
+                            Self::fts_indexed_text_for_storage(
+                                &effective_body,
+                                &entity.hints,
+                                self.encryption.as_ref(),
+                            ),
+                            id
+                        ],
                     )?;
                 }
             }
@@ -11519,11 +11521,11 @@ impl Database {
                                      // is now signature-driven + band-indexed (exact, and faster than
                                      // the prefilter ever was — the 64-term MATCH per write measured
                                      // SLOWER than the scan it pruned, see #476's A/B).
-            // Reviewable proposals must never merge into an existing active or
-            // admitted row: doing so would return the authoritative row's ID
-            // while reporting a pending outcome, and would erase proposal
-            // provenance. They are also non-serveable, so proposal writes do
-            // not need near-duplicate lookup at all.
+                                     // Reviewable proposals must never merge into an existing active or
+                                     // admitted row: doing so would return the authoritative row's ID
+                                     // while reporting a pending outcome, and would erase proposal
+                                     // provenance. They are also non-serveable, so proposal writes do
+                                     // not need near-duplicate lookup at all.
             if !skip_dedup && !gate_opts.sparse_update && entity.status != "proposed" {
                 if let Ok(Some(dup_id)) = Self::find_near_duplicate_with_conn(
                     &conn,
@@ -12735,23 +12737,44 @@ impl Database {
                 .unwrap_or_default();
             let mut filters = std::collections::BTreeMap::new();
             filters.insert("category".to_string(), selection_json(&params.category));
-            filters.insert("entity_type".to_string(), selection_json(&params.entity_type));
+            filters.insert(
+                "entity_type".to_string(),
+                selection_json(&params.entity_type),
+            );
             filters.insert("topic_path".to_string(), selection_json(&params.topic_path));
-            filters.insert("workspace_hash".to_string(), selection_json(&params.workspace_hash));
-            filters.insert("scope_weight".to_string(), selection_json(&params.scope_weight));
+            filters.insert(
+                "workspace_hash".to_string(),
+                selection_json(&params.workspace_hash),
+            );
+            filters.insert(
+                "scope_weight".to_string(),
+                selection_json(&params.scope_weight),
+            );
             filters.insert("agent_id".to_string(), selection_json(&params.agent_id));
-            filters.insert("epistemic_state".to_string(), selection_json(&params.epistemic_state));
+            filters.insert(
+                "epistemic_state".to_string(),
+                selection_json(&params.epistemic_state),
+            );
             filters.insert("visibility".to_string(), selection_json(&params.visibility));
             filters.insert("layer".to_string(), selection_json(&params.layer));
             filters.insert("always_on".to_string(), selection_json(&params.always_on));
             filters.insert("min_decay".to_string(), selection_json(&params.min_decay));
-            filters.insert("include_archived".to_string(), selection_json(&params.include_archived));
+            filters.insert(
+                "include_archived".to_string(),
+                selection_json(&params.include_archived),
+            );
             filters.insert(
                 "enforce_utility_horizon".to_string(),
                 selection_json(&params.enforce_utility_horizon),
             );
-            filters.insert("content_weight".to_string(), selection_json(&params.content_weight));
-            filters.insert("trust_weight".to_string(), selection_json(&params.trust_weight));
+            filters.insert(
+                "content_weight".to_string(),
+                selection_json(&params.content_weight),
+            );
+            filters.insert(
+                "trust_weight".to_string(),
+                selection_json(&params.trust_weight),
+            );
             filters.insert(
                 "max_prior_overturn".to_string(),
                 selection_json(&params.max_prior_overturn),
@@ -12764,17 +12787,41 @@ impl Database {
                 "recency_half_life_secs".to_string(),
                 selection_json(&params.recency_half_life_secs),
             );
-            filters.insert("preview_cap".to_string(), selection_json(&params.preview_cap));
+            filters.insert(
+                "preview_cap".to_string(),
+                selection_json(&params.preview_cap),
+            );
             filters.insert("tier_order".to_string(), selection_json(&params.tier_order));
-            filters.insert("declared_category".to_string(), selection_json(&params.declared_category));
-            filters.insert("declared_filters".to_string(), selection_json(&declared_filters));
-            filters.insert("type_filter".to_string(), selection_json(&params.type_filter));
-            filters.insert("anchor_expansion".to_string(), selection_json(&params.anchor_expansion));
-            filters.insert("budget_profile".to_string(), selection_json(&params.budget_profile));
+            filters.insert(
+                "declared_category".to_string(),
+                selection_json(&params.declared_category),
+            );
+            filters.insert(
+                "declared_filters".to_string(),
+                selection_json(&declared_filters),
+            );
+            filters.insert(
+                "type_filter".to_string(),
+                selection_json(&params.type_filter),
+            );
+            filters.insert(
+                "anchor_expansion".to_string(),
+                selection_json(&params.anchor_expansion),
+            );
+            filters.insert(
+                "budget_profile".to_string(),
+                selection_json(&params.budget_profile),
+            );
             filters.insert("max_tokens".to_string(), selection_json(&params.max_tokens));
-            filters.insert("depth_budget".to_string(), selection_json(&params.depth_budget));
+            filters.insert(
+                "depth_budget".to_string(),
+                selection_json(&params.depth_budget),
+            );
             filters.insert("profile".to_string(), selection_json(&params.profile));
-            filters.insert("validity_annotate".to_string(), selection_json(&params.validity_annotate));
+            filters.insert(
+                "validity_annotate".to_string(),
+                selection_json(&params.validity_annotate),
+            );
             filters.insert(
                 "query_time_unix_ms".to_string(),
                 selection_json(&params.query_time_unix_ms),
@@ -12929,7 +12976,8 @@ impl Database {
 
         // The keyword arm is core: its failure fails the recall (fail-closed,
         // matching the hybrid path). The dense arm degrades (recorded above).
-        let mut fts5_scored = fts5_scored.map_err(|e| format!("fused recall fts5 arm failed: {e}"))?;
+        let mut fts5_scored =
+            fts5_scored.map_err(|e| format!("fused recall fts5 arm failed: {e}"))?;
         let mut dense_scored = dense_scored.unwrap_or_default();
 
         let mut arm_status = |name: &str, scored: &[(Entity, f64)], degraded: bool| {
@@ -13085,8 +13133,10 @@ impl Database {
                 .collect();
             let (coherent, excluded) =
                 crate::evidence_lanes::select_chain_coherent_scored(all_scored);
-            let allowed: std::collections::HashSet<String> =
-                coherent.iter().map(|(entity, _)| entity.id.clone()).collect();
+            let allowed: std::collections::HashSet<String> = coherent
+                .iter()
+                .map(|(entity, _)| entity.id.clone())
+                .collect();
             declared_scored.retain(|(entity, _)| allowed.contains(&entity.id));
             fts5_scored.retain(|(entity, _)| allowed.contains(&entity.id));
             dense_scored.retain(|(entity, _)| allowed.contains(&entity.id));
@@ -13109,7 +13159,11 @@ impl Database {
                     _ => continue,
                 };
                 strategy.candidates = scored.len();
-                strategy.top = scored.iter().take(20).map(|(entity, _)| entity.id.clone()).collect();
+                strategy.top = scored
+                    .iter()
+                    .take(20)
+                    .map(|(entity, _)| entity.id.clone())
+                    .collect();
             }
         }
         trace.source_chain_exclusions = source_chain_exclusions;
@@ -13451,11 +13505,12 @@ impl Database {
             let _ = top_set;
         }
 
-        let mut selection_eligible_ids: std::collections::HashSet<String> = if include_selection_decisions {
-            ranked.iter().map(|(entity, _)| entity.id.clone()).collect()
-        } else {
-            std::collections::HashSet::new()
-        };
+        let mut selection_eligible_ids: std::collections::HashSet<String> =
+            if include_selection_decisions {
+                ranked.iter().map(|(entity, _)| entity.id.clone()).collect()
+            } else {
+                std::collections::HashSet::new()
+            };
         let mut selection_after_type_ids: std::collections::HashSet<String> =
             std::collections::HashSet::new();
         let mut selection_after_coverage_ids: std::collections::HashSet<String> =
@@ -13544,7 +13599,10 @@ impl Database {
                 .collect();
         }
         if include_selection_decisions {
-            selection_after_type_ids = ordered.iter().map(|(entity, _)| entity.id.clone()).collect();
+            selection_after_type_ids = ordered
+                .iter()
+                .map(|(entity, _)| entity.id.clone())
+                .collect();
         }
         if params.multihop {
             let query_ents = crate::multihop::query_entities(&params.query);
@@ -13590,17 +13648,21 @@ impl Database {
                 .map(|(entity, _)| entity.id.clone())
                 .collect();
         }
-        let selection_retained_ids: std::collections::HashSet<String> = if include_selection_decisions {
-            ordered.iter().map(|(entity, _)| entity.id.clone()).collect()
-        } else {
-            std::collections::HashSet::new()
-        };
+        let selection_retained_ids: std::collections::HashSet<String> =
+            if include_selection_decisions {
+                ordered
+                    .iter()
+                    .map(|(entity, _)| entity.id.clone())
+                    .collect()
+            } else {
+                std::collections::HashSet::new()
+            };
         if include_selection_decisions {
             for (entity, _) in &ordered {
                 selection_entities
                     .entry(entity.id.clone())
                     .or_insert_with(|| entity.clone());
-        }
+            }
         }
         let retained_count_before_token_budget = ordered.len();
         let mut retained: Vec<Entity> = Vec::new();
@@ -13792,15 +13854,20 @@ impl Database {
                 .map(|strategy| crate::selection_decisions::SelectionArmState {
                     arm: strategy.strategy.clone(),
                     status: strategy.status.clone(),
-                    candidate_count: strategy.candidates.min(
-                        crate::selection_decisions::MAX_DECISIONS,
-                    ),
+                    candidate_count: strategy
+                        .candidates
+                        .min(crate::selection_decisions::MAX_DECISIONS),
                 })
                 .collect();
             if params.multihop {
                 selection_arms.push(crate::selection_decisions::SelectionArmState {
                     arm: "multihop".to_string(),
-                    status: if expanded_ids.is_empty() { "empty" } else { "ok" }.to_string(),
+                    status: if expanded_ids.is_empty() {
+                        "empty"
+                    } else {
+                        "ok"
+                    }
+                    .to_string(),
                     candidate_count: expanded_ids
                         .len()
                         .min(crate::selection_decisions::MAX_DECISIONS),
@@ -13817,12 +13884,14 @@ impl Database {
                     && trace.strategies.iter().any(|strategy| {
                         matches!(strategy.status.as_str(), "degraded" | "unavailable")
                     });
-                Some(if source_unavailable {
-                    "source_arms_unavailable"
-                } else {
-                    "no_eligible_candidates"
-                }
-                .to_string())
+                Some(
+                    if source_unavailable {
+                        "source_arms_unavailable"
+                    } else {
+                        "no_eligible_candidates"
+                    }
+                    .to_string(),
+                )
             } else {
                 None
             };
@@ -13856,10 +13925,7 @@ impl Database {
         delivered_ranks: &std::collections::HashMap<String, u32>,
         eligible_ids: &std::collections::HashSet<String>,
         fused_ranks: &std::collections::HashMap<String, u32>,
-        arm_ranks: &std::collections::HashMap<
-            String,
-            std::collections::BTreeMap<String, u32>,
-        >,
+        arm_ranks: &std::collections::HashMap<String, std::collections::BTreeMap<String, u32>>,
     ) -> Result<Vec<String>, String> {
         if delivered_ranks.len() > crate::selection_decisions::MAX_DECISIONS {
             return Err(
@@ -13900,12 +13966,14 @@ impl Database {
     }
 
     fn selection_filter_disposition(entity: &Entity, params: &RecallParams) -> &'static str {
-        if (!params.include_archived && entity.archived) || !Self::entity_lifecycle_serveable(entity) {
+        if (!params.include_archived && entity.archived)
+            || !Self::entity_lifecycle_serveable(entity)
+        {
             return "filtered_lifecycle";
         }
         if let Some(ws) = params.workspace_hash.as_deref() {
-            let global_allowed = Self::scope_pref(params)
-                .is_some_and(|_| entity.workspace_hash.is_empty());
+            let global_allowed =
+                Self::scope_pref(params).is_some_and(|_| entity.workspace_hash.is_empty());
             if entity.workspace_hash != ws && !global_allowed {
                 return "filtered_scope";
             }
@@ -19530,10 +19598,10 @@ impl Database {
                 return Err("lineage continuation expired".into());
             }
         }
-        let state: crate::task_lineage::LineageState = serde_json::from_str(&row.state_json)
-            .map_err(|_| "lineage state malformed")?;
-        let state_digest = crate::task_lineage::state_digest(&state)
-            .map_err(|_| "lineage state malformed")?;
+        let state: crate::task_lineage::LineageState =
+            serde_json::from_str(&row.state_json).map_err(|_| "lineage state malformed")?;
+        let state_digest =
+            crate::task_lineage::state_digest(&state).map_err(|_| "lineage state malformed")?;
         if state_digest != row.state_digest {
             return Err("lineage state digest mismatch".into());
         }
@@ -19672,9 +19740,15 @@ impl Database {
             let conn = self.conn()?;
             Self::task_lineage_receipt_get(&conn, &action.lineage_transition_id)?
         };
-        let binding_mismatch = receipt.authority_manifest_id != action.manifest_id || receipt.authority_manifest_version != action.manifest_version;
-        let outcome_allowed = receipt.outcome.as_bytes() == [115, 116, 97, 108, 101] || receipt.outcome.as_bytes() == [114, 101, 118, 111, 107, 101, 100];
-        let binding_gate = if binding_mismatch { !outcome_allowed } else { false };
+        let binding_mismatch = receipt.authority_manifest_id != action.manifest_id
+            || receipt.authority_manifest_version != action.manifest_version;
+        let outcome_allowed = receipt.outcome.as_bytes() == [115, 116, 97, 108, 101]
+            || receipt.outcome.as_bytes() == [114, 101, 118, 111, 107, 101, 100];
+        let binding_gate = if binding_mismatch {
+            !outcome_allowed
+        } else {
+            false
+        };
         if receipt.action_id != action.id
             || receipt.lineage_id != action.lineage_id
             || receipt.outcome != action.lineage_outcome
@@ -19735,10 +19809,9 @@ impl Database {
         {
             return Err("lineage intent_hash must be a lowercase SHA-256 hex digest".into());
         }
-        let (policy_version, policy) = crate::task_lineage::policy_for_constraints(
-            &manifest.capability_constraints_json,
-        )
-        .map_err(|reason| format!("lineage policy rejected: {reason}"))?;
+        let (policy_version, policy) =
+            crate::task_lineage::policy_for_constraints(&manifest.capability_constraints_json)
+                .map_err(|reason| format!("lineage policy rejected: {reason}"))?;
         let admission_binding = json!({
             "agent_id": agent_id,
             "workspace_hash": workspace_hash,
@@ -19762,8 +19835,7 @@ impl Database {
             lineage,
         )
         .map_err(|reason| format!("lineage request rejected: {reason}"))?;
-        let idempotency_key_digest =
-            crate::task_lineage::idempotency_key_digest(action_key);
+        let idempotency_key_digest = crate::task_lineage::idempotency_key_digest(action_key);
         let now = now_ms();
         let is_continue = lineage.transition == "continue";
         let action_id = format!("act-{}", uuid::Uuid::new_v4().simple());
@@ -19794,7 +19866,8 @@ impl Database {
                     return Err("lineage idempotency key conflict".into());
                 }
                 let sql = format!("{} WHERE id=?1", Self::action_select_sql());
-                let action = conn.query_row(&sql, params![existing_action_id], Self::action_from_row)?;
+                let action =
+                    conn.query_row(&sql, params![existing_action_id], Self::action_from_row)?;
                 return Ok((action, false));
             }
 
@@ -19805,7 +19878,8 @@ impl Database {
             let mut current_state = crate::task_lineage::LineageState::initial();
             let mut refusal: Option<(String, String)> = None;
             if is_continue {
-                let reference = parent_reference.ok_or("lineage continuation reference is required")?;
+                let reference =
+                    parent_reference.ok_or("lineage continuation reference is required")?;
                 let row = Self::task_lineage_get(&conn, &reference.lineage_id)?
                     .ok_or("lineage continuation missing state")?;
                 let state = Self::validate_task_lineage_row(
@@ -19876,13 +19950,8 @@ impl Database {
                     reason: "resource_denied".to_string(),
                 }
             } else {
-                crate::task_lineage::apply_action(
-                    &current_state,
-                    lineage,
-                    &policy,
-                    intent_hash,
-                )
-                .map_err(|reason| format!("lineage transition rejected: {reason}"))?
+                crate::task_lineage::apply_action(&current_state, lineage, &policy, intent_hash)
+                    .map_err(|reason| format!("lineage transition rejected: {reason}"))?
             };
             if !is_continue && decision.outcome == "continued" {
                 decision.outcome = "new_authorization".to_string();
@@ -19914,71 +19983,85 @@ impl Database {
                         &policy_version,
                         &state_digest,
                     );
-                    (parent_lineage_id.clone(), parent_head_digest.clone(), next_head)
+                    (
+                        parent_lineage_id.clone(),
+                        parent_head_digest.clone(),
+                        next_head,
+                    )
                 };
             let receipt_binding = current_lineage.as_ref();
-            let receipt_authority_manifest_id = receipt_binding.map(|row| row.authority_manifest_id.clone()).unwrap_or_else(|| manifest.id.clone());
-            let receipt_authority_manifest_version = receipt_binding.map(|row| row.authority_manifest_version).unwrap_or(manifest.version);
-            let receipt_policy_version = receipt_binding.map(|row| row.policy_version.clone()).unwrap_or_else(|| policy_version.clone());
-            let receipt_expires_at_unix_ms = receipt_binding.map(|row| row.expires_at_unix_ms).unwrap_or(manifest.expires_at_unix_ms);
-            let receipt_revoked_at_unix_ms = receipt_binding.map(|row| row.revoked_at_unix_ms).unwrap_or(None);
+            let receipt_authority_manifest_id = receipt_binding
+                .map(|row| row.authority_manifest_id.clone())
+                .unwrap_or_else(|| manifest.id.clone());
+            let receipt_authority_manifest_version = receipt_binding
+                .map(|row| row.authority_manifest_version)
+                .unwrap_or(manifest.version);
+            let receipt_policy_version = receipt_binding
+                .map(|row| row.policy_version.clone())
+                .unwrap_or_else(|| policy_version.clone());
+            let receipt_expires_at_unix_ms = receipt_binding
+                .map(|row| row.expires_at_unix_ms)
+                .unwrap_or(manifest.expires_at_unix_ms);
+            let receipt_revoked_at_unix_ms = receipt_binding
+                .map(|row| row.revoked_at_unix_ms)
+                .unwrap_or(None);
             if advance_head {
                 if let Some(row) = current_lineage.as_ref() {
-                let changed = conn.execute(
-                    "UPDATE action_lineages
+                    let changed = conn.execute(
+                        "UPDATE action_lineages
                      SET parent_lineage_id=?1,parent_head_digest=?2,continuation_state_json=?3,
                          continuation_state_digest=?4,head_digest=?5,budget_spent=?6,
                          impact_units=?7,updated_at_unix_ms=?8
                      WHERE lineage_id=?9 AND head_digest=?10
                        AND continuation_state_digest=?11 AND revoked_at_unix_ms IS NULL
                        AND (expires_at_unix_ms IS NULL OR expires_at_unix_ms>?12)",
-                    params![
-                        parent_lineage_id,
-                        parent_head_digest,
-                        state_json,
-                        state_digest,
-                        head_digest,
-                        decision.state.budget_spent,
-                        decision.state.impact_units,
-                        now,
-                        row.lineage_id,
-                        row.head_digest,
-                        row.state_digest,
-                        now,
-                    ],
-                )?;
-                if changed != 1 {
-                    return Err("lineage continuation stale".into());
-                }
-            } else {
-                conn.execute(
-                    "INSERT INTO action_lineages
+                        params![
+                            parent_lineage_id,
+                            parent_head_digest,
+                            state_json,
+                            state_digest,
+                            head_digest,
+                            decision.state.budget_spent,
+                            decision.state.impact_units,
+                            now,
+                            row.lineage_id,
+                            row.head_digest,
+                            row.state_digest,
+                            now,
+                        ],
+                    )?;
+                    if changed != 1 {
+                        return Err("lineage continuation stale".into());
+                    }
+                } else {
+                    conn.execute(
+                        "INSERT INTO action_lineages
                      (lineage_id,parent_lineage_id,parent_head_digest,workspace_hash,agent_id,
                       authority_manifest_id,authority_manifest_version,policy_version,
                       continuation_state_json,continuation_state_digest,head_digest,budget_limit,
                       impact_limit,budget_spent,impact_units,expires_at_unix_ms,revoked_at_unix_ms,
                       created_at_unix_ms,updated_at_unix_ms)
                      VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,NULL,?17,?17)",
-                    params![
-                        new_lineage_id,
-                        parent_lineage_id,
-                        parent_head_digest,
-                        workspace_hash,
-                        agent_id,
-                        manifest.id,
-                        manifest.version,
-                        policy_version,
-                        state_json,
-                        state_digest,
-                        head_digest,
-                        policy.budget_limit,
-                        policy.impact_limit,
-                        decision.state.budget_spent,
-                        decision.state.impact_units,
-                        manifest.expires_at_unix_ms,
-                        now,
-                    ],
-                )?;
+                        params![
+                            new_lineage_id,
+                            parent_lineage_id,
+                            parent_head_digest,
+                            workspace_hash,
+                            agent_id,
+                            manifest.id,
+                            manifest.version,
+                            policy_version,
+                            state_json,
+                            state_digest,
+                            head_digest,
+                            policy.budget_limit,
+                            policy.impact_limit,
+                            decision.state.budget_spent,
+                            decision.state.impact_units,
+                            manifest.expires_at_unix_ms,
+                            now,
+                        ],
+                    )?;
                 }
             }
 
@@ -19993,11 +20076,12 @@ impl Database {
             } else {
                 "intent"
             };
-            let outcome_hash = if matches!(decision.outcome.as_str(), "denied" | "stale" | "revoked") {
-                state_digest.clone()
-            } else {
-                String::new()
-            };
+            let outcome_hash =
+                if matches!(decision.outcome.as_str(), "denied" | "stale" | "revoked") {
+                    state_digest.clone()
+                } else {
+                    String::new()
+                };
             let action = AuthorizedAction {
                 id: action_id.clone(),
                 manifest_id: manifest.id.clone(),
@@ -20756,11 +20840,11 @@ impl Database {
             finding_ref: finding_ref.clone(),
             superseding_head: superseding_head.clone(),
             handoff_receipt_ref: handoff_receipt_ref.clone(),
-                lineage_id: String::new(),
-                lineage_transition_id: String::new(),
-                lineage_outcome: String::new(),
-                lineage_continuation: None,
-                lineage_receipt: None,
+            lineage_id: String::new(),
+            lineage_transition_id: String::new(),
+            lineage_outcome: String::new(),
+            lineage_continuation: None,
+            lineage_receipt: None,
         };
         let conn = self.conn()?;
         conn.execute(
@@ -21587,13 +21671,12 @@ impl Database {
     ) -> Result<Option<AuthorizedAction>, Box<dyn std::error::Error>> {
         let action = {
             let conn = self.conn()?;
-            conn
-                .query_row(
-                    &format!("{} WHERE id=?1", Self::action_select_sql()),
-                    params![action_id],
-                    Self::action_from_row,
-                )
-                .optional()?
+            conn.query_row(
+                &format!("{} WHERE id=?1", Self::action_select_sql()),
+                params![action_id],
+                Self::action_from_row,
+            )
+            .optional()?
         };
         action
             .map(|value| self.attach_task_lineage_projection(value))
@@ -22056,7 +22139,9 @@ impl Database {
         &self,
         scope: &crate::task_state::TaskStateScope,
     ) -> Result<Option<crate::task_state::TaskState>, String> {
-        let conn = self.conn().map_err(|error| format!("task-state connection failed: {error}"))?;
+        let conn = self
+            .conn()
+            .map_err(|error| format!("task-state connection failed: {error}"))?;
         let row: Option<(String, i64, i64, String, String, String)> = conn
             .query_row(
                 "SELECT state_json, state_sequence, base_sequence, state_digest,
@@ -22111,7 +22196,9 @@ impl Database {
         state: &crate::task_state::TaskState,
     ) -> Result<(), String> {
         state.validate()?;
-        let conn = self.conn().map_err(|error| format!("task-state connection failed: {error}"))?;
+        let conn = self
+            .conn()
+            .map_err(|error| format!("task-state connection failed: {error}"))?;
         let tx = Self::audited_write_tx(&conn)
             .map_err(|error| format!("task-state transaction failed: {error}"))?;
         let current: Option<(i64, String)> = tx
@@ -22156,8 +22243,10 @@ impl Database {
                    AND state_sequence = ?15",
                 params![
                     &state.schema_version,
-                    i64::try_from(state.state_sequence).map_err(|_| "state_sequence exceeds SQLite range")?,
-                    i64::try_from(state.base_sequence).map_err(|_| "base_sequence exceeds SQLite range")?,
+                    i64::try_from(state.state_sequence)
+                        .map_err(|_| "state_sequence exceeds SQLite range")?,
+                    i64::try_from(state.base_sequence)
+                        .map_err(|_| "base_sequence exceeds SQLite range")?,
                     &state.observed_input_digest,
                     &state.source_digest,
                     &state.evidence_digest,
@@ -22169,7 +22258,8 @@ impl Database {
                     &state.scope.principal_id,
                     &state.scope.agent_id,
                     &state.scope.task_id,
-                    i64::try_from(state.base_sequence).map_err(|_| "base_sequence exceeds SQLite range")?,
+                    i64::try_from(state.base_sequence)
+                        .map_err(|_| "base_sequence exceeds SQLite range")?,
                 ],
             )
             .map_err(|error| format!("task-state update failed: {error}"))?
@@ -22188,8 +22278,10 @@ impl Database {
                     &state.scope.principal_id,
                     &state.scope.agent_id,
                     &state.schema_version,
-                    i64::try_from(state.state_sequence).map_err(|_| "state_sequence exceeds SQLite range")?,
-                    i64::try_from(state.base_sequence).map_err(|_| "base_sequence exceeds SQLite range")?,
+                    i64::try_from(state.state_sequence)
+                        .map_err(|_| "state_sequence exceeds SQLite range")?,
+                    i64::try_from(state.base_sequence)
+                        .map_err(|_| "base_sequence exceeds SQLite range")?,
                     &state.observed_input_digest,
                     &state.source_digest,
                     &state.evidence_digest,
@@ -22793,18 +22885,20 @@ impl Database {
             return Ok(());
         };
         let stored_body = match enc {
-            Some(enc) => match Self::decrypt_body_with_legacy_fallback(enc, &raw_body, &category, &key) {
-                crate::encryption::BodyDecrypt::Plaintext(plain)
-                | crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => {
-                    enc.encrypt(&plain, Self::build_aad(&category, &key).as_bytes())?
+            Some(enc) => {
+                match Self::decrypt_body_with_legacy_fallback(enc, &raw_body, &category, &key) {
+                    crate::encryption::BodyDecrypt::Plaintext(plain)
+                    | crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => {
+                        enc.encrypt(&plain, Self::build_aad(&category, &key).as_bytes())?
+                    }
+                    crate::encryption::BodyDecrypt::AuthFailed(error) => {
+                        return Err(format!(
+                            "history snapshot cannot authenticate {category}:{key}: {error}"
+                        )
+                        .into());
+                    }
                 }
-                crate::encryption::BodyDecrypt::AuthFailed(error) => {
-                    return Err(format!(
-                        "history snapshot cannot authenticate {category}:{key}: {error}"
-                    )
-                    .into());
-                }
-            },
+            }
             None => raw_body,
         };
         conn.execute(
@@ -22906,7 +23000,10 @@ impl Database {
         if changed == 0 {
             conn.execute(
                 "INSERT OR REPLACE INTO entities_fts (rowid, body_json) VALUES (?1, ?2)",
-                params![rowid, Self::fts_indexed_text_for_storage(body_plaintext, hints, enc)],
+                params![
+                    rowid,
+                    Self::fts_indexed_text_for_storage(body_plaintext, hints, enc)
+                ],
             )?;
         }
         Ok(())
@@ -24347,12 +24444,12 @@ impl Database {
         workspace: Option<&str>,
         mutation: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let profile = profile
-            .filter(|p| !p.trim().is_empty())
-            .ok_or_else(|| "strict scope deployment requires transport-stamped clientInfo.name".to_string())?;
-        let workspace = workspace
-            .filter(|w| !w.trim().is_empty())
-            .ok_or_else(|| "strict scope deployment requires a non-empty workspace_hash".to_string())?;
+        let profile = profile.filter(|p| !p.trim().is_empty()).ok_or_else(|| {
+            "strict scope deployment requires transport-stamped clientInfo.name".to_string()
+        })?;
+        let workspace = workspace.filter(|w| !w.trim().is_empty()).ok_or_else(|| {
+            "strict scope deployment requires a non-empty workspace_hash".to_string()
+        })?;
         let binding = self
             .workspace_binding_for(profile)?
             .ok_or_else(|| format!("strict scope deployment requires an active workspace binding for profile '{profile}'"))?;
@@ -26678,39 +26775,39 @@ impl Database {
                     let entity = self
                         .get_entity(&crate::observations::OBSERVATION_CATEGORY, &key)?
                         .unwrap_or_else(|| crate::models::Entity {
-                                id: id.clone(),
-                                category: crate::observations::OBSERVATION_CATEGORY.to_string(),
-                                key,
-                                body_json,
-                                status: "active".to_string(),
-                                entity_type: "insight".to_string(),
-                                tags: vec![],
-                                decay_score: 1.0,
-                                retrieval_count: 0,
-                                layer: "working".to_string(),
-                                topic_path: String::new(),
-                                archived: false,
-                                archive_reason: String::new(),
-                                links: vec![],
-                                verified: false,
-                                source: "perseus_vault_consolidate".to_string(),
-                                always_on: false,
-                                certainty: 0.5,
-                                workspace_hash: scope_ws.clone().unwrap_or_default(),
-                                agent_id: String::new(),
-                                visibility: "workspace".to_string(),
-                                follow_count: 0,
-                                miss_count: 0,
-                                follow_rate: 0.0,
-                                efficacy_status: "unverified".to_string(),
-                                epistemic_state: crate::models::default_epistemic_state(),
-                                hints: vec![],
-                                memory_type: String::new(),
-                                embedding: None,
-                                _parsed_body: None,
-                                created_at_unix_ms: created_at,
-                                last_accessed_unix_ms: created_at,
-                            });
+                            id: id.clone(),
+                            category: crate::observations::OBSERVATION_CATEGORY.to_string(),
+                            key,
+                            body_json,
+                            status: "active".to_string(),
+                            entity_type: "insight".to_string(),
+                            tags: vec![],
+                            decay_score: 1.0,
+                            retrieval_count: 0,
+                            layer: "working".to_string(),
+                            topic_path: String::new(),
+                            archived: false,
+                            archive_reason: String::new(),
+                            links: vec![],
+                            verified: false,
+                            source: "perseus_vault_consolidate".to_string(),
+                            always_on: false,
+                            certainty: 0.5,
+                            workspace_hash: scope_ws.clone().unwrap_or_default(),
+                            agent_id: String::new(),
+                            visibility: "workspace".to_string(),
+                            follow_count: 0,
+                            miss_count: 0,
+                            follow_rate: 0.0,
+                            efficacy_status: "unverified".to_string(),
+                            epistemic_state: crate::models::default_epistemic_state(),
+                            hints: vec![],
+                            memory_type: String::new(),
+                            embedding: None,
+                            _parsed_body: None,
+                            created_at_unix_ms: created_at,
+                            last_accessed_unix_ms: created_at,
+                        });
                     // A legacy observation can outlive a later rejection of
                     // one of its sources. Do not let the fallback entity above
                     // reintroduce it into maintenance or refresh writes.
@@ -27394,11 +27491,8 @@ impl Database {
                         })?,
                     };
                     let stored_body = if let Some(enc) = self.encryption.as_ref() {
-                        enc.encrypt(
-                            &body_plaintext,
-                            Self::build_aad(&category, &key).as_bytes(),
-                        )
-                        .map_err(|e| format!("observation refresh encryption failed: {e}"))?
+                        enc.encrypt(&body_plaintext, Self::build_aad(&category, &key).as_bytes())
+                            .map_err(|e| format!("observation refresh encryption failed: {e}"))?
                     } else {
                         body_plaintext.clone()
                     };
@@ -27866,27 +27960,29 @@ impl Database {
 
             // Decrypt bodies when encryption is on — the LLM reflects over
             // plaintext, and trigram clustering over ciphertext is noise.
-            let decrypted_entities: Vec<(String, String, String, f64, bool, f64)> = scanned_entities
-                .into_iter()
-                .map(|(id, key, body, cert, ver, imp)| {
-                    let body = if let Some(ref enc) = self.encryption {
-                        match Self::decrypt_body_with_aad_fallback(enc, &body, &category, &key) {
-                            crate::encryption::BodyDecrypt::Plaintext(s)
-                            | crate::encryption::BodyDecrypt::LegacyPlaintext(s) => s,
-                            crate::encryption::BodyDecrypt::AuthFailed(error) => {
-                                return Err(format!(
-                                    "dream scan cannot authenticate {}:{}: {}",
-                                    category, key, error
-                                )
-                                .into());
+            let decrypted_entities: Vec<(String, String, String, f64, bool, f64)> =
+                scanned_entities
+                    .into_iter()
+                    .map(|(id, key, body, cert, ver, imp)| {
+                        let body = if let Some(ref enc) = self.encryption {
+                            match Self::decrypt_body_with_aad_fallback(enc, &body, &category, &key)
+                            {
+                                crate::encryption::BodyDecrypt::Plaintext(s)
+                                | crate::encryption::BodyDecrypt::LegacyPlaintext(s) => s,
+                                crate::encryption::BodyDecrypt::AuthFailed(error) => {
+                                    return Err(format!(
+                                        "dream scan cannot authenticate {}:{}: {}",
+                                        category, key, error
+                                    )
+                                    .into());
+                                }
                             }
-                        }
-                    } else {
-                        body
-                    };
-                    Ok((id, key, body, cert, ver, imp))
-                })
-                .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
+                        } else {
+                            body
+                        };
+                        Ok((id, key, body, cert, ver, imp))
+                    })
+                    .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
             let decrypted_entities: Vec<_> = decrypted_entities
                 .into_iter()
                 .filter(|e| !e.2.is_empty())
@@ -28365,23 +28461,20 @@ Return a JSON object with an "insights" array. Each insight has:
         // only at this migration-compatible boundary and are immediately
         // rewritten with the canonical length-prefixed AAD.
         let stored_body = match self.encryption.as_ref() {
-            Some(enc) => match Self::decrypt_body_with_legacy_fallback(
-                enc,
-                &raw_body,
-                &category,
-                &key,
-            ) {
-                crate::encryption::BodyDecrypt::Plaintext(plain)
-                | crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => {
-                    enc.encrypt(&plain, Self::build_aad(&category, &key).as_bytes())?
+            Some(enc) => {
+                match Self::decrypt_body_with_legacy_fallback(enc, &raw_body, &category, &key) {
+                    crate::encryption::BodyDecrypt::Plaintext(plain)
+                    | crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => {
+                        enc.encrypt(&plain, Self::build_aad(&category, &key).as_bytes())?
+                    }
+                    crate::encryption::BodyDecrypt::AuthFailed(error) => {
+                        return Err(format!(
+                            "history snapshot cannot authenticate {category}:{key}: {error}"
+                        )
+                        .into());
+                    }
                 }
-                crate::encryption::BodyDecrypt::AuthFailed(error) => {
-                    return Err(format!(
-                        "history snapshot cannot authenticate {category}:{key}: {error}"
-                    )
-                    .into());
-                }
-            },
+            }
             None => raw_body,
         };
         let invalidated_at = now_ms();
@@ -29105,9 +29198,7 @@ Return a JSON object with an "insights" array. Each insight has:
         let mut digests: Vec<(String, String)> = Vec::with_capacity(targets.len());
         for (id, body, raw_hints) in &targets {
             let plain = match self.encryption.as_ref() {
-                Some(enc) => match Self::decrypt_body_with_aad_fallback(
-                    enc, body, category, key,
-                ) {
+                Some(enc) => match Self::decrypt_body_with_aad_fallback(enc, body, category, key) {
                     crate::encryption::BodyDecrypt::Plaintext(plain)
                     | crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => plain,
                     crate::encryption::BodyDecrypt::AuthFailed(error) => {
@@ -29120,21 +29211,17 @@ Return a JSON object with an "insights" array. Each insight has:
                 None => body.clone(),
             };
             if let Some(enc) = self.encryption.as_ref() {
-                let plain_hints = match Self::decrypt_body_with_aad_fallback(
-                    enc,
-                    raw_hints,
-                    category,
-                    key,
-                ) {
-                    crate::encryption::BodyDecrypt::Plaintext(plain)
-                    | crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => plain,
-                    crate::encryption::BodyDecrypt::AuthFailed(error) => {
-                        return Err(format!(
+                let plain_hints =
+                    match Self::decrypt_body_with_aad_fallback(enc, raw_hints, category, key) {
+                        crate::encryption::BodyDecrypt::Plaintext(plain)
+                        | crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => plain,
+                        crate::encryption::BodyDecrypt::AuthFailed(error) => {
+                            return Err(format!(
                             "cannot redact {category}:{key}: hints authentication failed: {error}"
                         )
-                        .into());
-                    }
-                };
+                            .into());
+                        }
+                    };
                 serde_json::from_str::<Vec<String>>(&plain_hints).map_err(|error| {
                     format!("cannot redact {category}:{key}: hints are invalid: {error}")
                 })?;
@@ -29685,9 +29772,8 @@ Return a JSON object with an "insights" array. Each insight has:
             }
         }
 
-        let encrypted_mutation = self.encryption.is_some()
-            && !dry_run
-            && evict.iter().any(|value| *value);
+        let encrypted_mutation =
+            self.encryption.is_some() && !dry_run && evict.iter().any(|value| *value);
         if encrypted_mutation {
             // Keep the write transaction's marker state aligned with the
             // canonical/index rewrite. If it commits, the canary stays absent
@@ -29729,22 +29815,19 @@ Return a JSON object with an "insights" array. Each insight has:
                     |q| q.get(0),
                 )?;
                 let body = match self.encryption.as_ref() {
-                    Some(enc) => match Self::decrypt_body_with_aad_fallback(
-                        enc,
-                        &raw_body,
-                        &r.cat,
-                        &r.key,
-                    ) {
-                        crate::encryption::BodyDecrypt::Plaintext(plain)
-                        | crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => plain,
-                        crate::encryption::BodyDecrypt::AuthFailed(error) => {
-                            return Err(format!(
-                                "history retention cannot authenticate {}/{}: {error}",
-                                r.cat, r.key
-                            )
-                            .into());
+                    Some(enc) => {
+                        match Self::decrypt_body_with_aad_fallback(enc, &raw_body, &r.cat, &r.key) {
+                            crate::encryption::BodyDecrypt::Plaintext(plain)
+                            | crate::encryption::BodyDecrypt::LegacyPlaintext(plain) => plain,
+                            crate::encryption::BodyDecrypt::AuthFailed(error) => {
+                                return Err(format!(
+                                    "history retention cannot authenticate {}/{}: {error}",
+                                    r.cat, r.key
+                                )
+                                .into());
+                            }
                         }
-                    },
+                    }
                     None => raw_body,
                 };
                 if r.tomb {
@@ -31167,16 +31250,18 @@ last_accessed: {}
         // requires an LLM endpoint; without one this remains digest-only.
         for (_id, category, key, raw_body) in &sample {
             let body = match self.encryption.as_ref() {
-                Some(enc) => match Self::decrypt_body_with_aad_fallback(enc, raw_body, category, key) {
-                    crate::encryption::BodyDecrypt::Plaintext(body)
-                    | crate::encryption::BodyDecrypt::LegacyPlaintext(body) => body,
-                    crate::encryption::BodyDecrypt::AuthFailed(error) => {
-                        return Err(format!(
+                Some(enc) => {
+                    match Self::decrypt_body_with_aad_fallback(enc, raw_body, category, key) {
+                        crate::encryption::BodyDecrypt::Plaintext(body)
+                        | crate::encryption::BodyDecrypt::LegacyPlaintext(body) => body,
+                        crate::encryption::BodyDecrypt::AuthFailed(error) => {
+                            return Err(format!(
                             "inheritance replay cannot authenticate sampled entity {category}:{key}: {error}"
                         )
                         .into());
+                        }
                     }
-                },
+                }
                 None => raw_body.clone(),
             };
             digests.push(sha256_hex(&body));
@@ -31285,7 +31370,11 @@ last_accessed: {}
         // Chain-sensitive traversal must see the full bounded eligible pool
         // before choosing a chronology/path; ordinary views retain their
         // smaller policy tail.
-        let candidate_limit = if chain_sensitive { 4096 } else { limit.saturating_mul(2) };
+        let candidate_limit = if chain_sensitive {
+            4096
+        } else {
+            limit.saturating_mul(2)
+        };
         // Base recall: twice the limit so the policy has a tail to reject.
         let params = RecallParams {
             query: query.to_string(),
@@ -31303,13 +31392,15 @@ last_accessed: {}
             .map(|(index, entity)| (entity.id.clone(), (index as u32) + 1))
             .collect();
         if crate::source_chain::is_chain_sensitive_query(query) {
-            let (coherent, _excluded) =
-                crate::evidence_lanes::select_chain_coherent_entities(base);
+            let (coherent, _excluded) = crate::evidence_lanes::select_chain_coherent_entities(base);
             base = coherent;
         }
         let expected_chain_key = if crate::source_chain::is_chain_sensitive_query(query) {
-            base.first()
-                .and_then(|entity| crate::evidence_lanes::entity_chain_key(entity).ok().flatten())
+            base.first().and_then(|entity| {
+                crate::evidence_lanes::entity_chain_key(entity)
+                    .ok()
+                    .flatten()
+            })
         } else {
             None
         };
@@ -31319,11 +31410,11 @@ last_accessed: {}
         let mut fatal_error: Option<String> = None;
 
         let mut select = |path: &mut Vec<crate::models::TraversalStep>,
-                      seen: &mut std::collections::HashSet<String>,
-                      rejected: &mut Vec<crate::models::RejectedDistractor>,
-                      id: &str,
-                      relation: &str,
-                      via: &str| {
+                          seen: &mut std::collections::HashSet<String>,
+                          rejected: &mut Vec<crate::models::RejectedDistractor>,
+                          id: &str,
+                          relation: &str,
+                          via: &str| {
             if fatal_error.is_some() {
                 return;
             }
@@ -31345,10 +31436,13 @@ last_accessed: {}
                 }
             };
             if !Self::typed_workspace_matches(&raw_target.workspace_hash, workspace_hash) {
-                fatal_error = Some(format!("typed traversal target {id} is outside the requested workspace"));
+                fatal_error = Some(format!(
+                    "typed traversal target {id} is outside the requested workspace"
+                ));
                 return;
             }
-            let mut visible = match self.filter_for_requester(vec![raw_target], requesting_agent_id) {
+            let mut visible = match self.filter_for_requester(vec![raw_target], requesting_agent_id)
+            {
                 Ok(visible) => visible,
                 Err(error) => {
                     fatal_error = Some(format!("typed traversal requester filter failed: {error}"));
@@ -31356,7 +31450,9 @@ last_accessed: {}
                 }
             };
             let Some(target) = visible.pop() else {
-                fatal_error = Some(format!("typed traversal target {id} is not visible to the requester"));
+                fatal_error = Some(format!(
+                    "typed traversal target {id} is not visible to the requester"
+                ));
                 return;
             };
             if let Some(expected) = expected_chain_key.as_deref() {
@@ -31433,11 +31529,11 @@ last_accessed: {}
                     drop(conn);
                     let links: Vec<crate::models::MemoryLink> = serde_json::from_str(&links_json)
                         .map_err(|error| {
-                            format!(
-                                "typed traversal link metadata parse failed for {}: {error}",
-                                hit.id
-                            )
-                        })?;
+                        format!(
+                            "typed traversal link metadata parse failed for {}: {error}",
+                            hit.id
+                        )
+                    })?;
                     for l in links {
                         let kind = crate::models::classify_relation(&l.relationship);
                         if matches!(
@@ -31448,7 +31544,14 @@ last_accessed: {}
                             || l.relationship == "causes"
                             || l.relationship == "derived_from"
                         {
-                            select(&mut path, &mut seen, &mut rejected, &l.target_id, &l.relationship, &hit.id);
+                            select(
+                                &mut path,
+                                &mut seen,
+                                &mut rejected,
+                                &l.target_id,
+                                &l.relationship,
+                                &hit.id,
+                            );
                         } else {
                             rejected.push(crate::models::RejectedDistractor {
                                 entity_id: l.target_id.clone(),
@@ -31492,12 +31595,17 @@ last_accessed: {}
                         })?;
                     let links: Vec<crate::models::MemoryLink> = serde_json::from_str(&links_json)
                         .map_err(|error| {
-                            format!(
-                                "typed traversal link metadata parse failed for {anchor}: {error}"
-                            )
-                        })?;
+                        format!("typed traversal link metadata parse failed for {anchor}: {error}")
+                    })?;
                     for l in links {
-                        select(&mut path, &mut seen, &mut rejected, &l.target_id, &l.relationship, anchor);
+                        select(
+                            &mut path,
+                            &mut seen,
+                            &mut rejected,
+                            &l.target_id,
+                            &l.relationship,
+                            anchor,
+                        );
                     }
                 }
                 drop(conn);
@@ -31567,7 +31675,14 @@ last_accessed: {}
                     .unwrap_or(i64::MIN);
                 for hit in ordered.iter() {
                     if seen.len() < limit {
-                        select(&mut path, &mut seen, &mut rejected, &hit.id, "valid_time_order", "");
+                        select(
+                            &mut path,
+                            &mut seen,
+                            &mut rejected,
+                            &hit.id,
+                            "valid_time_order",
+                            "",
+                        );
                     }
                 }
                 // Window policy: anything older than a year behind the anchor
@@ -31577,14 +31692,12 @@ last_accessed: {}
                     let hit_valid_from = serde_json::from_str::<serde_json::Value>(&hit.body_json)
                         .ok()
                         .and_then(|body| {
-                            crate::source_chain::SourceChainIdentity::from_entity_body(&body)
-                                .ok()
+                            crate::source_chain::SourceChainIdentity::from_entity_body(&body).ok()
                         })
                         .and_then(|identity| identity.valid_from_unix_ms);
                     let outside_valid_time_window = cutoff != i64::MIN
-                        && hit_valid_from.is_some_and(|valid_from| {
-                            cutoff.saturating_sub(valid_from) > YEAR_MS
-                        });
+                        && hit_valid_from
+                            .is_some_and(|valid_from| cutoff.saturating_sub(valid_from) > YEAR_MS);
                     rejected.push(crate::models::RejectedDistractor {
                         entity_id: hit.id.clone(),
                         reason: if outside_valid_time_window {
@@ -31599,7 +31712,14 @@ last_accessed: {}
                 // Semantic view: the ranked base list IS the policy; the
                 // tail beyond `limit` are the rejected distractors.
                 for hit in base.iter().take(limit) {
-                    select(&mut path, &mut seen, &mut rejected, &hit.id, "semantic_similar", "");
+                    select(
+                        &mut path,
+                        &mut seen,
+                        &mut rejected,
+                        &hit.id,
+                        "semantic_similar",
+                        "",
+                    );
                 }
                 for hit in base.iter().skip(limit) {
                     rejected.push(crate::models::RejectedDistractor {
@@ -32209,9 +32329,7 @@ last_accessed: {}
         &self,
         opts: &crate::models::ContextOptions,
         include_selection_decisions: bool,
-        sufficiency_requirements: Option<
-            &crate::evidence_sufficiency::EvidenceRequirementSet,
-        >,
+        sufficiency_requirements: Option<&crate::evidence_sufficiency::EvidenceRequirementSet>,
     ) -> Result<crate::models::ContextBlock, Box<dyn std::error::Error>> {
         use crate::models::ContextMode;
         let ws = opts.workspace_hash.clone();
@@ -32543,13 +32661,12 @@ last_accessed: {}
             )
             .map(|entity| entity.id.clone())
             .collect();
-        let context_recall_status = if query.is_none()
-            || (body_entities.is_empty() && always_on_entities.is_empty())
-        {
-            crate::models::RecallStatus::Empty
-        } else {
-            crate::models::RecallStatus::Fresh
-        };
+        let context_recall_status =
+            if query.is_none() || (body_entities.is_empty() && always_on_entities.is_empty()) {
+                crate::models::RecallStatus::Empty
+            } else {
+                crate::models::RecallStatus::Fresh
+            };
         let context_recall_outcome = crate::models::RecallOutcome {
             status: context_recall_status.clone(),
             abstained: context_recall_status == crate::models::RecallStatus::Empty,
@@ -32573,9 +32690,7 @@ last_accessed: {}
                 opts.requesting_agent_id.as_deref(),
                 &context_recall_outcome,
             )
-            .map_err(|error| {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, error)
-            })?;
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
             if report.outcome != crate::evidence_sufficiency::SufficiencyOutcome::Complete {
                 let mode = report
                     .fallback
@@ -32637,9 +32752,7 @@ last_accessed: {}
         let selection_decisions = if include_selection_decisions {
             use std::collections::BTreeMap;
 
-            if always_on_entities
-                .len()
-                .saturating_add(body_entities.len())
+            if always_on_entities.len().saturating_add(body_entities.len())
                 > CONTEXT_SELECTION_MAX_CANDIDATES
             {
                 warnings.push(format!(
@@ -32653,7 +32766,11 @@ last_accessed: {}
             let mut delivered_order = Vec::new();
             let mut arms = Vec::new();
             let topical_status = if !on_demand {
-                if body_entities.is_empty() { "empty" } else { "ok" }
+                if body_entities.is_empty() {
+                    "empty"
+                } else {
+                    "ok"
+                }
             } else if query.is_none() {
                 "skipped"
             } else if body_entities.is_empty() {
@@ -32666,7 +32783,11 @@ last_accessed: {}
                 (
                     "context_always_on",
                     always_on_entities.as_slice(),
-                    if always_on_entities.is_empty() { "empty" } else { "ok" },
+                    if always_on_entities.is_empty() {
+                        "empty"
+                    } else {
+                        "ok"
+                    },
                 ),
                 ("context_topical", body_entities.as_slice(), topical_status),
             ] {
@@ -32747,7 +32868,11 @@ last_accessed: {}
                 mode: format!("context_{}", opts.mode.as_str()),
                 query_sha256: crate::db::sha256_hex(opts.query.as_deref().unwrap_or("")),
                 limit: opts.limit.max(1).min(4096) as usize,
-                token_budget: if budget > 0 { (budget / 4).max(1) } else { i64::MAX },
+                token_budget: if budget > 0 {
+                    (budget / 4).max(1)
+                } else {
+                    i64::MAX
+                },
                 budget_profile: opts.model.clone(),
                 rerank: false,
                 multihop: false,
@@ -32784,9 +32909,7 @@ last_accessed: {}
                     delivered_order,
                     abstention_reason,
                 )
-                .map_err(|error| {
-                    std::io::Error::new(std::io::ErrorKind::InvalidData, error)
-                })?,
+                .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?,
             )
         } else {
             None
@@ -36134,9 +36257,7 @@ pub(crate) fn entity_from_row(
                 return Err(rusqlite::Error::FromSqlConversionFailure(
                     3,
                     rusqlite::types::Type::Text,
-                    Box::new(std::io::Error::other(
-                        "entity body authentication failed",
-                    )),
+                    Box::new(std::io::Error::other("entity body authentication failed")),
                 ));
             }
         }
@@ -36506,12 +36627,15 @@ pub(crate) mod tests {
         let (db, path) = temp_db();
         let first = r#"{"note":"same semantic claim","admission":{"record_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"provenance":{"state":"admitted"}}"#;
         let second = r#"{"note":"same semantic claim","admission":{"record_digest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},"provenance":{"state":"pending"}}"#;
-        db.remember_skip_dedup(&make_entity("semantic-dedup-1", "facts", "semantic-dedup-1", first))
-            .unwrap();
+        db.remember_skip_dedup(&make_entity(
+            "semantic-dedup-1",
+            "facts",
+            "semantic-dedup-1",
+            first,
+        ))
+        .unwrap();
 
-        let duplicate = db
-            .find_near_duplicate("facts", "", second, 0.7)
-            .unwrap();
+        let duplicate = db.find_near_duplicate("facts", "", second, 0.7).unwrap();
         assert_eq!(duplicate.as_deref(), Some("semantic-dedup-1"));
 
         let stored = db
@@ -38290,7 +38414,7 @@ pub(crate) mod tests {
             approver_principals: vec![],
             allowed_inbound_principals: vec![],
             permitted_external_ref_prefixes: vec![
-                "github:Perseus-Computing-LLC/perseus-vault".to_string(),
+                "github:Perseus-Computing-LLC/perseus-vault".to_string()
             ],
             max_parallel_actions: 1,
             mode: "enforce".to_string(),
@@ -38323,8 +38447,13 @@ pub(crate) mod tests {
     #[test]
     fn expired_manifest_is_not_treated_as_legacy_open_capability() {
         let (db, path) = temp_db();
-        db.agent_upsert("agent-expired-capability", "Expired Capability", 3, "perseus")
-            .unwrap();
+        db.agent_upsert(
+            "agent-expired-capability",
+            "Expired Capability",
+            3,
+            "perseus",
+        )
+        .unwrap();
         let input = crate::models::AuthorityManifestInput {
             agent_id: "agent-expired-capability".to_string(),
             workspace_hash: "ws-expired-capability".to_string(),
@@ -38346,7 +38475,10 @@ pub(crate) mod tests {
             "ws-expired-capability",
             "memory.read",
         );
-        assert!(result.is_err(), "expired policy must not reopen legacy access");
+        assert!(
+            result.is_err(),
+            "expired policy must not reopen legacy access"
+        );
         let manifest = db
             .authority_get("agent-expired-capability", "ws-expired-capability", true)
             .unwrap()
@@ -39425,8 +39557,13 @@ pub(crate) mod tests {
     #[test]
     fn repeated_active_scoped_revocations_use_the_latest_effective_event() {
         let (db, path) = temp_db();
-        db.agent_upsert("agent-revocation-history", "Revocation History", 2, "perseus")
-            .unwrap();
+        db.agent_upsert(
+            "agent-revocation-history",
+            "Revocation History",
+            2,
+            "perseus",
+        )
+        .unwrap();
         let input = crate::models::AuthorityManifestInput {
             agent_id: "agent-revocation-history".to_string(),
             workspace_hash: "ws-revocation-history".to_string(),
@@ -39517,8 +39654,12 @@ pub(crate) mod tests {
         db.record_revocation("github:example/repo", "ws-revoked-anchor", "scope retired")
             .unwrap();
 
-        assert!(db.action_approve(&approval.id, "approver-revoked-anchor", "granted").is_err());
-        assert!(db.action_lease_acquire(&lease_action.id, "holder-revoked-anchor", 60).is_err());
+        assert!(db
+            .action_approve(&approval.id, "approver-revoked-anchor", "granted")
+            .is_err());
+        assert!(db
+            .action_lease_acquire(&lease_action.id, "holder-revoked-anchor", 60)
+            .is_err());
         let _ = std::fs::remove_file(path);
     }
 
@@ -39587,12 +39728,8 @@ pub(crate) mod tests {
             "globally revoked action agents must not retain legacy-open access"
         );
         assert!(
-            db.action_approve(
-                &approval.id,
-                "approver-principal-revoked",
-                "granted",
-            )
-            .is_err(),
+            db.action_approve(&approval.id, "approver-principal-revoked", "granted",)
+                .is_err(),
             "globally revoked action agents must not be approved"
         );
         assert!(
@@ -40778,11 +40915,12 @@ pub(crate) mod tests {
             .iter()
             .map(|id| (by_id.get(id).unwrap().clone(), 0.0))
             .collect();
-        let legacy = super::reciprocal_rank_fusion(
-            &dense, &sparse, 60.0, 2, 1.0, None, 0.0, 0,
-        );
+        let legacy = super::reciprocal_rank_fusion(&dense, &sparse, 60.0, 2, 1.0, None, 0.0, 0);
         assert_eq!(
-            legacy.iter().map(|(x, _)| x.id.as_str()).collect::<Vec<_>>(),
+            legacy
+                .iter()
+                .map(|(x, _)| x.id.as_str())
+                .collect::<Vec<_>>(),
             vec!["relevant", "conflict_neighbor"]
         );
 
@@ -40801,9 +40939,8 @@ pub(crate) mod tests {
             (by_id["distractor"].clone(), 0.0),
             (by_id["arm_only"].clone(), 0.0),
         ];
-        let bad = super::reciprocal_rank_fusion(
-            &bad_dense, &bad_sparse, 60.0, 2, 1.0, None, 0.0, 0,
-        );
+        let bad =
+            super::reciprocal_rank_fusion(&bad_dense, &bad_sparse, 60.0, 2, 1.0, None, 0.0, 0);
         assert_eq!(
             bad.iter().map(|(x, _)| x.id.as_str()).collect::<Vec<_>>(),
             vec!["conflict_neighbor", "relevant"]
@@ -41779,7 +41916,7 @@ pub(crate) mod tests {
         done.store(true, Ordering::Relaxed);
         let max_hold = probe.join().expect("probe thread panicked");
 
-                eprintln!("test diagnostic suppressed");
+        eprintln!("test diagnostic suppressed");
 
         let _ = fs::remove_file(&path);
         assert!(
@@ -42145,7 +42282,7 @@ pub(crate) mod tests {
         let wall = t.elapsed().as_secs_f64();
         done.store(true, Ordering::Relaxed);
         let max_hold = probe.join().expect("probe thread panicked");
-                eprintln!("test diagnostic suppressed");
+        eprintln!("test diagnostic suppressed");
 
         let mut failures = Vec::new();
         gate_check(
@@ -44961,10 +45098,7 @@ pub(crate) mod tests {
         let hydrated = db
             .decrypt_body_for_read(&raw, "facts", "belief-encrypted")
             .unwrap();
-        assert_eq!(
-            hydrated,
-            r#"{"content":"authenticated belief content"}"#
-        );
+        assert_eq!(hydrated, r#"{"content":"authenticated belief content"}"#);
         let direct = db
             .get_entity("facts", "belief-encrypted")
             .unwrap()
@@ -45074,11 +45208,7 @@ pub(crate) mod tests {
             r#"{"content":"only the authentic term"}"#,
         ))
         .unwrap();
-        let forged_token = db
-            .encryption
-            .as_ref()
-            .unwrap()
-            .blind_token("forged");
+        let forged_token = db.encryption.as_ref().unwrap().blind_token("forged");
         db.conn()
             .unwrap()
             .execute(
@@ -45152,10 +45282,7 @@ pub(crate) mod tests {
         .unwrap();
         db.conn()
             .unwrap()
-            .execute(
-                "UPDATE entities_fts SET body_json = 'deadbeef'",
-                [],
-            )
+            .execute("UPDATE entities_fts SET body_json = 'deadbeef'", [])
             .unwrap();
         db.deactivate_encryption_markers().unwrap();
         assert!(
@@ -45295,7 +45422,10 @@ pub(crate) mod tests {
         drop(old_conn);
 
         let result = db.migrate_from_v0_1(&old_path);
-        assert!(result.is_err(), "row conversion errors must block encrypted activation");
+        assert!(
+            result.is_err(),
+            "row conversion errors must block encrypted activation"
+        );
         assert_eq!(
             db.encryption_storage_state(),
             "encrypted-incomplete",
@@ -45310,7 +45440,10 @@ pub(crate) mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(canary_rows, 0, "failed import must not reactivate the canary");
+        assert_eq!(
+            canary_rows, 0,
+            "failed import must not reactivate the canary"
+        );
 
         let _ = std::fs::remove_file(&key_path);
         drop(db);
@@ -45409,11 +45542,17 @@ pub(crate) mod tests {
             )
             .unwrap();
         assert!(matches!(
-            new.decrypt_body(&rotated, Database::build_aad("facts", "q-rotate").as_bytes()),
+            new.decrypt_body(
+                &rotated,
+                Database::build_aad("facts", "q-rotate").as_bytes()
+            ),
             crate::encryption::BodyDecrypt::Plaintext(_)
         ));
         assert!(!matches!(
-            old.decrypt_body(&rotated, Database::build_aad("facts", "q-rotate").as_bytes()),
+            old.decrypt_body(
+                &rotated,
+                Database::build_aad("facts", "q-rotate").as_bytes()
+            ),
             crate::encryption::BodyDecrypt::Plaintext(_)
         ));
 
@@ -45451,7 +45590,10 @@ pub(crate) mod tests {
             "unkeyed-write",
             r#"{"note":"must not become plaintext"}"#,
         ));
-        assert!(result.is_err(), "public writers must require the encryption key");
+        assert!(
+            result.is_err(),
+            "public writers must require the encryption key"
+        );
         let conn = unkeyed.conn().unwrap();
         let count: i64 = conn
             .query_row(
@@ -45485,7 +45627,13 @@ pub(crate) mod tests {
         conn.execute(
             "UPDATE entities SET embedding = ?1, emb_sig = ?2, emb_sig4 = ?3, fingerprint = ?4
              WHERE id = ?5",
-            params![vec![1_u8, 2, 3, 4], vec![5_u8, 6], vec![7_u8, 8], vec![9_u8, 10], id],
+            params![
+                vec![1_u8, 2, 3, 4],
+                vec![5_u8, 6],
+                vec![7_u8, 8],
+                vec![9_u8, 10],
+                id
+            ],
         )
         .unwrap();
         conn.execute(
@@ -45522,16 +45670,35 @@ pub(crate) mod tests {
             .get_entity_by_id_unfiltered(&id)
             .unwrap()
             .expect("redacted entity retained");
-        assert!(stored.hints.is_empty(), "redaction must clear sensitive hints");
+        assert!(
+            stored.hints.is_empty(),
+            "redaction must clear sensitive hints"
+        );
         let conn = db.conn().unwrap();
-        let derived: (Option<Vec<u8>>, Option<Vec<u8>>, Option<Vec<u8>>, Option<Vec<u8>>, i64, i64) =
-            conn.query_row(
+        let derived: (
+            Option<Vec<u8>>,
+            Option<Vec<u8>>,
+            Option<Vec<u8>>,
+            Option<Vec<u8>>,
+            i64,
+            i64,
+        ) = conn
+            .query_row(
                 "SELECT embedding, emb_sig, emb_sig4, fingerprint,
                         (SELECT COUNT(*) FROM entities_embedding_snapshot WHERE id = ?1),
                         (SELECT COUNT(*) FROM projection_basis WHERE source_entity_id = ?1)
                  FROM entities WHERE id = ?1",
                 params![id],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                    ))
+                },
             )
             .unwrap();
         assert!(derived.0.is_none());
@@ -45549,7 +45716,11 @@ pub(crate) mod tests {
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .unwrap();
-        assert_eq!(dedup_counts, (0, 0), "redaction must clear dedup signatures");
+        assert_eq!(
+            dedup_counts,
+            (0, 0),
+            "redaction must clear dedup signatures"
+        );
         drop(conn);
 
         let _ = std::fs::remove_file(&key_path);
@@ -45677,7 +45848,9 @@ pub(crate) mod tests {
         let restored_overlay = format!("{restored}.governance.db");
         let conn = rusqlite::Connection::open(&restored_overlay).unwrap();
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM erasure_mandates", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM erasure_mandates", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(count, 1, "restore must preserve erasure mandates");
         drop(conn);
@@ -45719,7 +45892,10 @@ pub(crate) mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_ne!(history_body, legacy, "history must not retain a plaintext body");
+        assert_ne!(
+            history_body, legacy,
+            "history must not retain a plaintext body"
+        );
         drop(conn);
 
         let _ = std::fs::remove_file(&key_path);
@@ -45746,7 +45922,10 @@ pub(crate) mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(indexed, 0, "archived entities must not be inserted into live FTS");
+        assert_eq!(
+            indexed, 0,
+            "archived entities must not be inserted into live FTS"
+        );
         drop(conn);
         drop(db);
         let _ = fs::remove_file(&path);
@@ -45859,23 +46038,21 @@ pub(crate) mod tests {
             ],
         )
         .unwrap();
-        let result = Database::index_history_row_fts(
-            &conn,
-            db.encryption.as_ref(),
-            "history-auth-failure",
-        );
+        let result =
+            Database::index_history_row_fts(&conn, db.encryption.as_ref(), "history-auth-failure");
         assert!(
             result.is_err(),
             "history FTS indexing must reject an unauthenticated body"
         );
         let indexed: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM entity_history_fts",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT COUNT(*) FROM entity_history_fts", [], |row| {
+                row.get(0)
+            })
             .unwrap();
-        assert_eq!(indexed, 0, "failed authentication must not create an FTS row");
+        assert_eq!(
+            indexed, 0,
+            "failed authentication must not create an FTS row"
+        );
         drop(conn);
         let _ = std::fs::remove_file(&key_path);
         let _ = std::fs::remove_file(&wrong_key_path);
@@ -45965,7 +46142,10 @@ pub(crate) mod tests {
             )
             .unwrap();
         assert!(matches!(
-            enc.decrypt_body(&stored, Database::build_aad("facts", "rekey-hints").as_bytes()),
+            enc.decrypt_body(
+                &stored,
+                Database::build_aad("facts", "rekey-hints").as_bytes()
+            ),
             crate::encryption::BodyDecrypt::Plaintext(_)
         ));
         let _ = std::fs::remove_file(&key_path);
@@ -45983,7 +46163,10 @@ pub(crate) mod tests {
             .encryption
             .as_ref()
             .unwrap()
-            .encrypt(body, Database::legacy_aad("facts", "history-aad").as_bytes())
+            .encrypt(
+                body,
+                Database::legacy_aad("facts", "history-aad").as_bytes(),
+            )
             .unwrap();
         db.conn()
             .unwrap()
@@ -46030,7 +46213,10 @@ pub(crate) mod tests {
             .encryption
             .as_ref()
             .unwrap()
-            .encrypt(body, Database::legacy_aad("facts", "quarantine-aad").as_bytes())
+            .encrypt(
+                body,
+                Database::legacy_aad("facts", "quarantine-aad").as_bytes(),
+            )
             .unwrap();
         db.conn()
             .unwrap()
@@ -46246,10 +46432,7 @@ pub(crate) mod tests {
             _ => panic!("fixture: canary did not decrypt under current AAD"),
         };
         let legacy_ct = enc
-            .encrypt(
-                &plain,
-                Database::legacy_canary_aad().as_bytes(),
-            )
+            .encrypt(&plain, Database::legacy_canary_aad().as_bytes())
             .unwrap();
         db.conn()
             .unwrap()
@@ -46433,7 +46616,8 @@ pub(crate) mod tests {
     #[test]
     fn rejected_value_does_not_flow_through_maintenance_derived_writes() {
         let (db, path) = temp_db();
-        let rejected = r#"{"note":"the deployment uses postgres as the primary datastore rejected-source"}"#;
+        let rejected =
+            r#"{"note":"the deployment uses postgres as the primary datastore rejected-source"}"#;
         let safe_a = r#"{"note":"the deployment uses postgres as the primary datastore safe-a"}"#;
         let safe_b = r#"{"note":"the deployment uses postgres as the primary datastore safe-b"}"#;
         let safe_c = r#"{"note":"the deployment uses postgres as the primary datastore safe-c"}"#;
@@ -46446,7 +46630,8 @@ pub(crate) mod tests {
         ] {
             let mut entity = make_entity(id, "facts", id, body);
             entity.workspace_hash = workspace.to_string();
-            db.remember_skip_dedup(&entity).expect("seed maintenance source");
+            db.remember_skip_dedup(&entity)
+                .expect("seed maintenance source");
         }
 
         db.reject_value(
@@ -46563,7 +46748,7 @@ pub(crate) mod tests {
         let mut ent3 = make_entity("k2", "convention", "k2", r#"{"note":"other"}"#);
         ent3.workspace_hash = "ws-a".to_string();
         let distinct = db.remember(&ent3);
-                if !(distinct.is_ok()) {
+        if !(distinct.is_ok()) {
             panic!("test assertion failed");
         };
 
@@ -46571,7 +46756,7 @@ pub(crate) mod tests {
         let mut ent4 = make_entity("k3", "preference", "k3", body);
         ent4.workspace_hash = "ws-a".to_string();
         let other_pred = db.remember(&ent4);
-                if !(other_pred.is_ok()) {
+        if !(other_pred.is_ok()) {
             panic!("test assertion failed");
         };
 
@@ -46579,7 +46764,7 @@ pub(crate) mod tests {
         let mut ent5 = make_entity("k4", "convention", "k4", body);
         ent5.workspace_hash = "ws-a".to_string();
         let over = db.remember_with_options(&ent5, false, None, None, true);
-                if !(over.is_ok()) {
+        if !(over.is_ok()) {
             panic!("test assertion failed");
         };
         assert!(
@@ -46611,7 +46796,7 @@ pub(crate) mod tests {
         let mut ent = make_entity("b1", "convention", "b1", body);
         ent.workspace_hash = "ws-b".to_string();
         let other = db.remember(&ent);
-                if !(other.is_ok()) {
+        if !(other.is_ok()) {
             panic!("test assertion failed");
         };
 
@@ -46619,7 +46804,7 @@ pub(crate) mod tests {
         let mut ent_a = make_entity("a1", "convention", "a1", body);
         ent_a.workspace_hash = "ws-a".to_string();
         let same = db.remember(&ent_a);
-                if !(same.is_err()) {
+        if !(same.is_err()) {
             panic!("test assertion failed");
         };
 
@@ -46638,7 +46823,7 @@ pub(crate) mod tests {
         let mut ent_c = make_entity("c1", "convention", "c1", body);
         ent_c.workspace_hash = "ws-c".to_string();
         let global = db.remember(&ent_c);
-                if !(global.is_err()) {
+        if !(global.is_err()) {
             panic!("test assertion failed");
         };
 
@@ -46834,7 +47019,7 @@ pub(crate) mod tests {
         let mut ent_e = make_entity("e", "convention", "e", r#"{"note":"expiring value"}"#);
         ent_e.workspace_hash = "ws-a".to_string();
         let after_expiry = db.remember(&ent_e);
-                if !(after_expiry.is_ok()) {
+        if !(after_expiry.is_ok()) {
             panic!("test assertion failed");
         };
 
@@ -47315,7 +47500,10 @@ pub(crate) mod tests {
         assert!(
             results[0].key.starts_with("chain-a-"),
             "returned keys: {:?}",
-            results.iter().map(|entity| entity.key.clone()).collect::<Vec<_>>()
+            results
+                .iter()
+                .map(|entity| entity.key.clone())
+                .collect::<Vec<_>>()
         );
         let _ = fs::remove_file(&path);
     }
@@ -48290,7 +48478,7 @@ pub(crate) mod tests {
         );
         b.workspace_hash = "ws-beta".to_string();
         let (id_b, act_b) = db.remember(&b).unwrap();
-                if &(act_b) != &("created") {
+        if &(act_b) != &("created") {
             panic!("test assertion failed");
         };
         assert_eq!(id_b, "dws-b");
@@ -48304,7 +48492,7 @@ pub(crate) mod tests {
         );
         c.workspace_hash = "ws-alpha".to_string();
         let (id_c, act_c) = db.remember(&c).unwrap();
-                if !(act_c.contains("deduped")) {
+        if !(act_c.contains("deduped")) {
             panic!("test assertion failed");
         };
         assert_eq!(id_c, "dws-a");
@@ -48831,7 +49019,7 @@ pub(crate) mod tests {
             ..Default::default()
         };
         let report = db.cohere(&params).unwrap();
-                if !(report.linked >= 1) {
+        if !(report.linked >= 1) {
             panic!("test assertion failed");
         };
 
@@ -52033,15 +52221,16 @@ pub(crate) mod tests {
 
         let obs = &report.observations[0];
         assert_eq!(obs.proof_count, 2);
-                if !(obs.source_ids.contains(&"src-1".to_string())
-                && obs.source_ids.contains(&"src-2".to_string())) {
+        if !(obs.source_ids.contains(&"src-1".to_string())
+            && obs.source_ids.contains(&"src-2".to_string()))
+        {
             panic!("test assertion failed");
         };
         // Summary comes from the higher-certainty source (src-2, certainty 0.9).
-                if !(obs.summary.contains("data store") || obs.summary.contains("datastore")) {
+        if !(obs.summary.contains("data store") || obs.summary.contains("datastore")) {
             panic!("test assertion failed");
         };
-                if !((obs.certainty - 0.75).abs() < 1e-9) {
+        if !((obs.certainty - 0.75).abs() < 1e-9) {
             panic!("test assertion failed");
         };
 
@@ -52331,7 +52520,7 @@ pub(crate) mod tests {
             .unwrap();
         assert_eq!(report.observations_created, 1);
         let obs = &report.observations[0];
-                if !(obs.source_ids.contains(&"cold-a".to_string())) {
+        if !(obs.source_ids.contains(&"cold-a".to_string())) {
             panic!("test assertion failed");
         };
 
@@ -52443,8 +52632,9 @@ pub(crate) mod tests {
         assert_eq!(report.workspace_hash.as_deref(), Some("ws-one"));
         assert!(!report.global);
         let obs = &report.observations[0];
-                if !(obs.source_ids.contains(&"w1-a".to_string())
-                && obs.source_ids.contains(&"w1-b".to_string())) {
+        if !(obs.source_ids.contains(&"w1-a".to_string())
+            && obs.source_ids.contains(&"w1-b".to_string()))
+        {
             panic!("test assertion failed");
         };
         assert!(
@@ -52604,8 +52794,9 @@ pub(crate) mod tests {
         assert_eq!(report.entities_examined, 3);
         assert_eq!(report.observations_created, 1);
         let obs = &report.observations[0];
-                if !(obs.source_ids.contains(&"w1-a".to_string())
-                && obs.source_ids.contains(&"w2-a".to_string())) {
+        if !(obs.source_ids.contains(&"w1-a".to_string())
+            && obs.source_ids.contains(&"w2-a".to_string()))
+        {
             panic!("test assertion failed");
         };
         // Global derived records are system-scoped (''), not silently bound.
@@ -53495,8 +53686,9 @@ pub(crate) mod tests {
         );
         assert_eq!(report.insights_written, 1);
         let ins = &report.insights[0];
-                if !(ins.source_ids.contains(&"sc-ep-1".to_string())
-                && ins.source_ids.contains(&"sc-ep-2".to_string())) {
+        if !(ins.source_ids.contains(&"sc-ep-1".to_string())
+            && ins.source_ids.contains(&"sc-ep-2".to_string()))
+        {
             panic!("test assertion failed");
         };
         assert!(
@@ -53572,7 +53764,7 @@ pub(crate) mod tests {
         let r1 = db.dream_with_llm(&scoped("ws-one"), &stub).unwrap();
         assert_eq!(r1.insights_written, 1);
         let first = &r1.insights[0];
-                if !(first.source_ids.contains(&"dp-1".to_string())) {
+        if !(first.source_ids.contains(&"dp-1".to_string())) {
             panic!("test assertion failed");
         };
 
@@ -53583,7 +53775,7 @@ pub(crate) mod tests {
         assert_eq!(r2.insights_deduped, 0);
         let second = &r2.insights[0];
         assert_ne!(first.entity_id, second.entity_id);
-                if !(second.source_ids.contains(&"dp-3".to_string())) {
+        if !(second.source_ids.contains(&"dp-3".to_string())) {
             panic!("test assertion failed");
         };
 
@@ -53754,7 +53946,7 @@ pub(crate) mod tests {
         assert!(body["evidence_hash"].as_str().is_some());
 
         // Certainty blends LLM confidence with full coverage: 0.7*0.9 + 0.3*1.0.
-                if !((ins.confidence - 0.93).abs() < 1e-9) {
+        if !((ins.confidence - 0.93).abs() < 1e-9) {
             panic!("test assertion failed");
         };
 
@@ -57785,12 +57977,18 @@ pub(crate) mod tests {
         let scoped = db
             .history_matching_keys("scope history marker", Some("ws-a"), 10)
             .unwrap();
-        assert_eq!(scoped, vec![("scope-history".to_string(), "workspace-key".to_string())]);
+        assert_eq!(
+            scoped,
+            vec![("scope-history".to_string(), "workspace-key".to_string())]
+        );
 
         let global = db
             .history_matching_keys("scope history marker", Some(""), 10)
             .unwrap();
-        assert_eq!(global, vec![("scope-history".to_string(), "global-key".to_string())]);
+        assert_eq!(
+            global,
+            vec![("scope-history".to_string(), "global-key".to_string())]
+        );
         let _ = std::fs::remove_file(path);
     }
 
@@ -59118,7 +59316,9 @@ pub(crate) mod tests {
         ))
         .unwrap();
 
-        assert!(db.invalidate_entity("invalidate-loser", "invalidate-winner").unwrap());
+        assert!(db
+            .invalidate_entity("invalidate-loser", "invalidate-winner")
+            .unwrap());
 
         let conn = db.conn().unwrap();
         let history: i64 = conn
@@ -59236,7 +59436,9 @@ pub(crate) mod tests {
         let before: i64 = db
             .conn()
             .unwrap()
-            .query_row("SELECT COUNT(*) FROM entity_history_fts", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM entity_history_fts", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert!(before > 0);
 
@@ -59248,7 +59450,9 @@ pub(crate) mod tests {
             .query_row("SELECT COUNT(*) FROM entity_history", [], |row| row.get(0))
             .unwrap();
         let fts: i64 = conn
-            .query_row("SELECT COUNT(*) FROM entity_history_fts", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM entity_history_fts", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         let orphans: i64 = conn
             .query_row(
@@ -59308,7 +59512,10 @@ pub(crate) mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(invalid_tokens, 0, "encrypted history FTS must remain blind-token only");
+        assert_eq!(
+            invalid_tokens, 0,
+            "encrypted history FTS must remain blind-token only"
+        );
         drop(conn);
 
         let marker = db
@@ -59995,9 +60202,7 @@ pub(crate) mod tests {
             entity.last_accessed_unix_ms = last_accessed;
             db.remember_skip_dedup(&entity).unwrap();
         }
-        let traversal = db
-            .typed_traversal("what shipped on 2026-06-20", 1)
-            .unwrap();
+        let traversal = db.typed_traversal("what shipped on 2026-06-20", 1).unwrap();
         let rejected = traversal
             .rejected
             .iter()
@@ -60039,9 +60244,16 @@ pub(crate) mod tests {
             .unwrap();
         assert_eq!(t.intent, "causal");
         assert_eq!(t.view, "causal");
-        let root = t.path.iter().find(|step| step.entity_id == "tr-a").expect("root path step");
+        let root = t
+            .path
+            .iter()
+            .find(|step| step.entity_id == "tr-a")
+            .expect("root path step");
         assert_eq!(root.source_chain_status, "known");
-        assert_eq!(root.source_chain_commitment.as_deref().map(str::len), Some(64));
+        assert_eq!(
+            root.source_chain_commitment.as_deref().map(str::len),
+            Some(64)
+        );
         assert!(
             t.path
                 .iter()
@@ -60115,8 +60327,11 @@ pub(crate) mod tests {
             .unwrap();
 
         assert!(
-            crate::tools::handle_typed_traversal(&db, json!({"query": "what depends on the gateway service"}))
-                .is_err(),
+            crate::tools::handle_typed_traversal(
+                &db,
+                json!({"query": "what depends on the gateway service"})
+            )
+            .is_err(),
             "public typed traversal must require explicit scope and requester identity"
         );
         assert!(
@@ -60256,8 +60471,14 @@ pub(crate) mod tests {
         let (db, path) = temp_db();
         db.agent_upsert("traverse-agent", "Traverse Agent", 2, "perseus")
             .unwrap();
-        db.workspace_bind("traverse-agent", "workspace-traverse", "read_write", "{}", "operator")
-            .unwrap();
+        db.workspace_bind(
+            "traverse-agent",
+            "workspace-traverse",
+            "read_write",
+            "{}",
+            "operator",
+        )
+        .unwrap();
         db.authority_set(
             &crate::models::AuthorityManifestInput {
                 agent_id: "traverse-agent".to_string(),
@@ -63553,7 +63774,7 @@ pub(crate) mod tests {
             },
         )
         .unwrap();
-                if !(action.starts_with("quarantined")) {
+        if !(action.starts_with("quarantined")) {
             panic!("test assertion failed");
         };
         assert!(qid.starts_with("qrn-"));
@@ -63688,7 +63909,7 @@ pub(crate) mod tests {
             crate::interference::WriteGateOptions::none(),
         )
         .unwrap();
-                if !(action.starts_with("quarantined")) {
+        if !(action.starts_with("quarantined")) {
             panic!("test assertion failed");
         };
         assert!(qid.starts_with("qrn-"));
@@ -63993,7 +64214,7 @@ pub(crate) mod tests {
             },
         )
         .unwrap();
-                if !(action.starts_with("quarantined")) {
+        if !(action.starts_with("quarantined")) {
             panic!("test assertion failed");
         };
         assert!(qid.starts_with("qrn-"));
@@ -64084,7 +64305,7 @@ pub(crate) mod tests {
         assert!(rec["interference_report"]["score"].as_f64().unwrap() > 0.9);
         // release: materializes through the audited path.
         let out = db.release_write_quarantine(&qid, "operator").unwrap();
-                if !(out.contains("released")) {
+        if !(out.contains("released")) {
             panic!("test assertion failed");
         };
         let live = db.get_entity("facts", "held").unwrap().unwrap();
@@ -64116,7 +64337,7 @@ pub(crate) mod tests {
         )
         .unwrap();
         let out = db.delete_write_quarantine(&qid2, "operator").unwrap();
-                if !(out.contains("deleted")) {
+        if !(out.contains("deleted")) {
             panic!("test assertion failed");
         };
         assert!(db.get_entity("facts", "held2").unwrap().is_none());
@@ -64223,7 +64444,7 @@ pub(crate) mod tests {
             crate::interference::WriteGateOptions::none(),
         )
         .unwrap();
-                if !(action.starts_with("quarantined")) {
+        if !(action.starts_with("quarantined")) {
             panic!("test assertion failed");
         };
         assert!(qid.starts_with("qrn-"));
@@ -65148,7 +65369,7 @@ pub(crate) mod tests {
                 force: false,
             })
             .unwrap();
-                if !(out.interference_skips >= 1) {
+        if !(out.interference_skips >= 1) {
             panic!("test assertion failed");
         };
         // No new observation was created for the cluster.
@@ -66330,7 +66551,7 @@ pub(crate) mod tests {
                 &["phrasing b"],
             ))
             .unwrap();
-                if !(action.starts_with("deduped")) {
+        if !(action.starts_with("deduped")) {
             panic!("test assertion failed");
         };
         assert_eq!(

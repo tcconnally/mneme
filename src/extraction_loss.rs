@@ -45,18 +45,21 @@ const RETRY_FLOOR: f64 = 0.10;
 /// Deterministic similarity. Embedding mode uses the bundled model when
 /// enabled and available; any failure falls back to token containment so the
 /// net never depends on a backend. Returns (score, mode_used).
-fn similarity(
-    db: &Database,
-    a: &str,
-    b: &str,
-    prefer_embedding: bool,
-) -> (f64, &'static str) {
+fn similarity(db: &Database, a: &str, b: &str, prefer_embedding: bool) -> (f64, &'static str) {
     if prefer_embedding && db.embedding_config().enabled {
         if let Ok(va) = crate::embedding::generate_embedding(db.embedding_config(), a) {
             if let Ok(vb) = crate::embedding::generate_embedding(db.embedding_config(), b) {
                 let dot: f64 = va.iter().zip(vb.iter()).map(|(x, y)| (x * y) as f64).sum();
-                let na: f64 = va.iter().map(|x| (*x as f64) * (*x as f64)).sum::<f64>().sqrt();
-                let nb: f64 = vb.iter().map(|x| (*x as f64) * (*x as f64)).sum::<f64>().sqrt();
+                let na: f64 = va
+                    .iter()
+                    .map(|x| (*x as f64) * (*x as f64))
+                    .sum::<f64>()
+                    .sqrt();
+                let nb: f64 = vb
+                    .iter()
+                    .map(|x| (*x as f64) * (*x as f64))
+                    .sum::<f64>()
+                    .sqrt();
                 if na > 0.0 && nb > 0.0 {
                     return (dot / (na * nb), "embedding");
                 }
@@ -112,10 +115,8 @@ impl Database {
         let entity = self
             .get_entity_by_id_pub(entity_id)?
             .ok_or_else(|| format!("entity not found: {entity_id}"))?;
-        let body: serde_json::Value =
-            serde_json::from_str(&entity.body_json).unwrap_or_else(|_| {
-                serde_json::Value::String(entity.body_json.clone())
-            });
+        let body: serde_json::Value = serde_json::from_str(&entity.body_json)
+            .unwrap_or_else(|_| serde_json::Value::String(entity.body_json.clone()));
         let text = body
             .get("text")
             .and_then(|t| t.as_str())
@@ -508,8 +509,8 @@ pub(crate) fn query_fingerprint(query: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::tests::temp_db;
     use crate::db::tests::make_entity;
+    use crate::db::tests::temp_db;
 
     fn entity_body(text: &str) -> String {
         serde_json::json!({ "text": text }).to_string()
@@ -527,20 +528,31 @@ mod tests {
         let (id, _) = db
             .remember_skip_dedup(&make_entity("el-1", "insight", "k1", &body))
             .unwrap();
-        let r = db.span_audit(&id, 4, DEFAULT_COVERAGE_THRESHOLD, "token").unwrap();
+        let r = db
+            .span_audit(&id, 4, DEFAULT_COVERAGE_THRESHOLD, "token")
+            .unwrap();
         assert_eq!(r["claims"].as_i64().unwrap(), 2, "copula facts extracted");
         let spans = r["spans"].as_array().unwrap();
         assert_eq!(spans.len(), 1, "narrative sentence is residual");
-        assert!(spans[0]["text"].as_str().unwrap().contains("capacity board"));
+        assert!(spans[0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("capacity board"));
         assert!(spans[0]["coverage_mode"].as_str().unwrap() == "token");
 
         // Append-only: re-audit adds nothing.
-        let r2 = db.span_audit(&id, 4, DEFAULT_COVERAGE_THRESHOLD, "token").unwrap();
+        let r2 = db
+            .span_audit(&id, 4, DEFAULT_COVERAGE_THRESHOLD, "token")
+            .unwrap();
         assert_eq!(r2["spans_n"].as_i64().unwrap(), 1);
         let rows: i64 = db
             .conn()
             .unwrap()
-            .query_row("SELECT COUNT(*) FROM residual_spans WHERE entity_id = ?1", params![id], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM residual_spans WHERE entity_id = ?1",
+                params![id],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(rows, 1);
         let _ = std::fs::remove_file(path);
@@ -555,7 +567,8 @@ mod tests {
         let (id, _) = db
             .remember_skip_dedup(&make_entity("el-2", "insight", "k2", &body))
             .unwrap();
-        db.span_audit(&id, 4, DEFAULT_COVERAGE_THRESHOLD, "token").unwrap();
+        db.span_audit(&id, 4, DEFAULT_COVERAGE_THRESHOLD, "token")
+            .unwrap();
 
         // Query about the standby region — the claim ("uses postgres 14")
         // doesn't cover it, so the span must be retried.
@@ -563,7 +576,9 @@ mod tests {
         let r = db.report_refusal(q, &[id.clone()], None).unwrap();
         let retry = r["retry"].as_array().unwrap();
         assert!(
-            retry.iter().any(|s| s["text"].as_str().unwrap().contains("eu-west-2")),
+            retry
+                .iter()
+                .any(|s| s["text"].as_str().unwrap().contains("eu-west-2")),
             "span must be retried for the refusal: {r}"
         );
 
@@ -585,12 +600,16 @@ mod tests {
         entity.agent_id = "owner".to_string();
         entity.workspace_hash = "workspace-a".to_string();
         let (id, _) = db.remember_skip_dedup(&entity).unwrap();
-        db.span_audit(&id, 4, DEFAULT_COVERAGE_THRESHOLD, "token").unwrap();
+        db.span_audit(&id, 4, DEFAULT_COVERAGE_THRESHOLD, "token")
+            .unwrap();
         let q = "what region hosts the standby replica";
         db.report_refusal(q, &[id.clone()], None).unwrap();
         db.report_success(q, &[id.clone()]).unwrap();
 
-        assert!(db.serve_confirmed_query_key(q, Some("workspace-a"), None).unwrap().is_none());
+        assert!(db
+            .serve_confirmed_query_key(q, Some("workspace-a"), None)
+            .unwrap()
+            .is_none());
         assert!(db
             .serve_confirmed_query_key(q, Some("workspace-b"), Some("owner"))
             .unwrap()
@@ -609,7 +628,8 @@ mod tests {
         let (id, _) = db
             .remember_skip_dedup(&make_entity("el-3", "insight", "k3", &body))
             .unwrap();
-        db.span_audit(&id, 4, DEFAULT_COVERAGE_THRESHOLD, "token").unwrap();
+        db.span_audit(&id, 4, DEFAULT_COVERAGE_THRESHOLD, "token")
+            .unwrap();
 
         let q = "what region hosts the standby replica";
         let refusal = db.report_refusal(q, &[id.clone()], None).unwrap();
@@ -634,11 +654,14 @@ mod tests {
     #[test]
     fn lossy_unit_repairs_append_only_on_touch() {
         let (db, path) = temp_db();
-        let body = entity_body("The Orion stack uses postgres 14. The standby replica lives in eu-west-2.");
+        let body = entity_body(
+            "The Orion stack uses postgres 14. The standby replica lives in eu-west-2.",
+        );
         let (id, _) = db
             .remember_skip_dedup(&make_entity("el-4", "insight", "k4", &body))
             .unwrap();
-        db.span_audit(&id, 4, DEFAULT_COVERAGE_THRESHOLD, "token").unwrap();
+        db.span_audit(&id, 4, DEFAULT_COVERAGE_THRESHOLD, "token")
+            .unwrap();
 
         // Drive the unit lossy with repeated hopeless refusals.
         let q = "what color is the orion dashboard theme";
@@ -680,7 +703,10 @@ mod tests {
 
     #[test]
     fn query_fingerprint_is_stable_and_case_folded() {
-        assert_eq!(query_fingerprint("  Orion v2.0 ships?  "), query_fingerprint("orion v2.0 ships?"));
+        assert_eq!(
+            query_fingerprint("  Orion v2.0 ships?  "),
+            query_fingerprint("orion v2.0 ships?")
+        );
         assert_ne!(query_fingerprint("a"), query_fingerprint("b"));
     }
 }

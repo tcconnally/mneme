@@ -545,8 +545,7 @@ impl Database {
             let mut out = Vec::new();
             for row in mapped {
                 let (id, links_str) = row?;
-                let links: Vec<MemoryLink> =
-                    serde_json::from_str(&links_str).unwrap_or_default();
+                let links: Vec<MemoryLink> = serde_json::from_str(&links_str).unwrap_or_default();
                 out.push((id, links));
             }
             out
@@ -574,8 +573,7 @@ impl Database {
             .flat_map(|g| g.iter().map(|&u| graph.nodes[u].clone()))
             .collect();
         let hydrated = self.entities_by_ids(&all_member_ids)?;
-        let by_id: HashMap<&str, &Entity> =
-            hydrated.iter().map(|e| (e.id.as_str(), e)).collect();
+        let by_id: HashMap<&str, &Entity> = hydrated.iter().map(|e| (e.id.as_str(), e)).collect();
 
         let now = now_ms();
         let mut communities: Vec<Community> = Vec::with_capacity(groups.len());
@@ -858,9 +856,7 @@ impl Database {
                     .count();
                 // One shared member is too weak: it could be a coincidental
                 // graph bridge. Two preserve the old lesson's evidence basis.
-                if overlap >= 2
-                    && best.as_ref().map_or(true, |(score, _)| overlap > *score)
-                {
+                if overlap >= 2 && best.as_ref().map_or(true, |(score, _)| overlap > *score) {
                     best = Some((overlap, candidate_id));
                 }
             }
@@ -905,7 +901,10 @@ impl Database {
             .to_string(),
             status: "active".to_string(),
             entity_type: "insight".to_string(),
-            tags: vec!["derivation:community_summary".to_string(), "graphrag".to_string()],
+            tags: vec![
+                "derivation:community_summary".to_string(),
+                "graphrag".to_string(),
+            ],
             decay_score: 0.5,
             retrieval_count: 0,
             layer: "working".to_string(), // canonical name for the semantic layer
@@ -1219,8 +1218,12 @@ mod tests {
     }
 
     fn link(db: &Database, from_cat: &str, from_key: &str, to_cat: &str, to_key: &str) {
-        let to = db.get_entity(to_cat, to_key).unwrap().expect("target exists");
-        db.link(from_cat, from_key, &to.id, "related").expect("link");
+        let to = db
+            .get_entity(to_cat, to_key)
+            .unwrap()
+            .expect("target exists");
+        db.link(from_cat, from_key, &to.id, "related")
+            .expect("link");
     }
 
     /// Ring-link a planted cluster: k0→k1→k2→…→k0 plus one chord, so every
@@ -1249,9 +1252,9 @@ mod tests {
                     relationship: "related".to_string(),
                     weight: 0.5,
                     source: None,
-                                    kind: None,
+                    kind: None,
                     asserted_at_unix_ms: None,
-})
+                })
                 .collect()
         };
         build_graph(&[
@@ -1274,7 +1277,11 @@ mod tests {
         assert_eq!(labels[3], labels[4]);
         assert_eq!(labels[4], labels[5]);
         assert_ne!(labels[0], labels[3], "bridge must not merge the triangles");
-        assert!(modularity(&g, &labels) > 0.3, "Q = {}", modularity(&g, &labels));
+        assert!(
+            modularity(&g, &labels) > 0.3,
+            "Q = {}",
+            modularity(&g, &labels)
+        );
     }
 
     #[test]
@@ -1313,13 +1320,36 @@ mod tests {
     #[test]
     fn detect_recovers_three_planted_clusters() {
         let (db, path) = temp_db();
-        plant_cluster(&db, "rust", &["r1", "r2", "r3", "r4"], "rust borrow checker lifetimes");
-        plant_cluster(&db, "cook", &["c1", "c2", "c3", "c4"], "sourdough hydration baking");
-        plant_cluster(&db, "astro", &["a1", "a2", "a3", "a4"], "telescope nebula exposure");
+        plant_cluster(
+            &db,
+            "rust",
+            &["r1", "r2", "r3", "r4"],
+            "rust borrow checker lifetimes",
+        );
+        plant_cluster(
+            &db,
+            "cook",
+            &["c1", "c2", "c3", "c4"],
+            "sourdough hydration baking",
+        );
+        plant_cluster(
+            &db,
+            "astro",
+            &["a1", "a2", "a3", "a4"],
+            "telescope nebula exposure",
+        );
 
         let report = db.detect_communities("", "label_prop", 2).expect("detect");
-        assert_eq!(report.communities.len(), 3, "3 planted clusters: {:?}",
-            report.communities.iter().map(|c| c.size).collect::<Vec<_>>());
+        assert_eq!(
+            report.communities.len(),
+            3,
+            "3 planted clusters: {:?}",
+            report
+                .communities
+                .iter()
+                .map(|c| c.size)
+                .collect::<Vec<_>>()
+        );
         assert!(
             report.modularity > 0.3,
             "modularity must exceed 0.3, got {}",
@@ -1361,7 +1391,10 @@ mod tests {
         let r3 = db.detect_communities("", "louvain", 2).expect("louvain");
         assert_eq!(r3.communities.len(), 2);
         assert!(r3.modularity > 0.3);
-        assert!(db.detect_communities("", "banana", 2).is_err(), "unknown algorithm must error");
+        assert!(
+            db.detect_communities("", "banana", 2).is_err(),
+            "unknown algorithm must error"
+        );
 
         let _ = std::fs::remove_file(&path);
     }
@@ -1381,7 +1414,11 @@ mod tests {
         assert_eq!(scoped.communities[0].size, 2);
 
         let unscoped = db.detect_communities("", "label_prop", 2).unwrap();
-        assert_eq!(unscoped.communities.len(), 0, "default ws has no linked pair");
+        assert_eq!(
+            unscoped.communities.len(),
+            0,
+            "default ws has no linked pair"
+        );
         // Both runs persist independently (scoped rows survive the unscoped run).
         assert_eq!(db.load_communities("ws-a").unwrap().len(), 1);
 
@@ -1396,7 +1433,13 @@ mod tests {
         for k in ["b1", "b2", "b3", "b4"] {
             remember(&db, "big", k, &format!("{} {}", big, k));
         }
-        for (i, j) in [("b1", "b2"), ("b2", "b3"), ("b3", "b4"), ("b4", "b1"), ("b1", "b3")] {
+        for (i, j) in [
+            ("b1", "b2"),
+            ("b2", "b3"),
+            ("b3", "b4"),
+            ("b4", "b1"),
+            ("b1", "b3"),
+        ] {
             link(&db, "big", i, "big", j);
         }
         let report = db.detect_communities("", "label_prop", 2).unwrap();
@@ -1408,7 +1451,11 @@ mod tests {
             MAX_COMMUNITY_SUMMARY_CHARS,
             summary.chars().count()
         );
-        assert!(summary.contains("big/"), "summary should name members: {}", summary);
+        assert!(
+            summary.contains("big/"),
+            "summary should name members: {}",
+            summary
+        );
         assert!(summary.starts_with("Community of 4 linked memories."));
 
         let _ = std::fs::remove_file(&path);
@@ -1417,7 +1464,12 @@ mod tests {
     #[test]
     fn community_summary_materializes_entity_with_evidence_links_and_caches() {
         let (db, path) = temp_db();
-        plant_cluster(&db, "topic", &["t1", "t2", "t3", "t4"], "shared theme words");
+        plant_cluster(
+            &db,
+            "topic",
+            &["t1", "t2", "t3", "t4"],
+            "shared theme words",
+        );
         let report = db.detect_communities("", "label_prop", 2).unwrap();
         let cid = report.communities[0].id.clone();
 
@@ -1427,16 +1479,25 @@ mod tests {
         assert!(!first.summary_entity_id.is_empty());
 
         // The materialized entity exists, carries evidence_for links to members.
-        let entity = db.get_entity("community_summary", &cid).unwrap().expect("entity");
+        let entity = db
+            .get_entity("community_summary", &cid)
+            .unwrap()
+            .expect("entity");
         assert_eq!(entity.id, first.summary_entity_id);
         assert_eq!(entity.links.len(), 4);
-        assert!(entity.links.iter().all(|l| l.relationship == "evidence_for"));
+        assert!(entity
+            .links
+            .iter()
+            .all(|l| l.relationship == "evidence_for"));
         let member_set: std::collections::HashSet<&str> = report.communities[0]
             .member_ids
             .iter()
             .map(|s| s.as_str())
             .collect();
-        assert!(entity.links.iter().all(|l| member_set.contains(l.target_id.as_str())));
+        assert!(entity
+            .links
+            .iter()
+            .all(|l| member_set.contains(l.target_id.as_str())));
 
         // Second call: cache hit (same member digest ⇒ same community id).
         let second = db.community_summary(&cid, false, false).expect("summary 2");
@@ -1455,7 +1516,8 @@ mod tests {
         plant_cluster(&db, "grow", &["g1", "g2", "g3", "g4"], "growing cluster");
         let report = db.detect_communities("", "label_prop", 2).unwrap();
         let old_id = report.communities[0].id.clone();
-        db.community_summary(&old_id, false, false).expect("materialize");
+        db.community_summary(&old_id, false, false)
+            .expect("materialize");
 
         // Membership changes: a new member joins the cluster.
         remember(&db, "grow", "g5", "growing cluster newcomer");
@@ -1463,7 +1525,10 @@ mod tests {
         link(&db, "grow", "g5", "grow", "g1");
         let report2 = db.detect_communities("", "label_prop", 2).unwrap();
         let new_id = report2.communities[0].id.clone();
-        assert_ne!(new_id, old_id, "membership change must produce a new community id");
+        assert_ne!(
+            new_id, old_id,
+            "membership change must produce a new community id"
+        );
         assert_eq!(
             report2.stale_summaries_archived, 1,
             "the old community's summary entity must be archived"
@@ -1481,7 +1546,12 @@ mod tests {
     #[test]
     fn changed_community_rehydrates_prior_summary_as_successor_evidence() {
         let (db, path) = temp_db();
-        plant_cluster(&db, "rehydrate", &["r1", "r2", "r3", "r4"], "provider budget incident");
+        plant_cluster(
+            &db,
+            "rehydrate",
+            &["r1", "r2", "r3", "r4"],
+            "provider budget incident",
+        );
         let first_run = db.detect_communities("", "label_prop", 2).unwrap();
         let old_id = first_run.communities[0].id.clone();
         let old_summary = db.community_summary(&old_id, false, false).unwrap();
@@ -1489,7 +1559,12 @@ mod tests {
         // New related experience changes the evidence neighborhood. A fresh
         // summary should preserve an auditable bridge to the prior distilled
         // context rather than merely replacing it.
-        remember(&db, "rehydrate", "r5", "provider budget incident new evidence");
+        remember(
+            &db,
+            "rehydrate",
+            "r5",
+            "provider budget incident new evidence",
+        );
         link(&db, "rehydrate", "r4", "rehydrate", "r5");
         link(&db, "rehydrate", "r5", "rehydrate", "r1");
         let second_run = db.detect_communities("", "label_prop", 2).unwrap();
@@ -1524,10 +1599,20 @@ mod tests {
         }
         // Re-detect: summary entities must not merge or join communities.
         let r2 = db.detect_communities("", "label_prop", 2).unwrap();
-        assert_eq!(r2.communities.len(), 2, "summary entities must stay out of the graph");
         assert_eq!(
-            r1.communities.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
-            r2.communities.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+            r2.communities.len(),
+            2,
+            "summary entities must stay out of the graph"
+        );
+        assert_eq!(
+            r1.communities
+                .iter()
+                .map(|c| c.id.as_str())
+                .collect::<Vec<_>>(),
+            r2.communities
+                .iter()
+                .map(|c| c.id.as_str())
+                .collect::<Vec<_>>(),
         );
 
         let _ = std::fs::remove_file(&path);
@@ -1576,8 +1661,16 @@ mod tests {
             cats
         );
         assert!(!result.llm_used);
-        assert!(result.answer.contains("rustlang/"), "answer: {}", result.answer);
-        assert!(result.answer.contains("baking/"), "answer: {}", result.answer);
+        assert!(
+            result.answer.contains("rustlang/"),
+            "answer: {}",
+            result.answer
+        );
+        assert!(
+            result.answer.contains("baking/"),
+            "answer: {}",
+            result.answer
+        );
 
         // Determinism: identical output on a frozen DB.
         let again = db
@@ -1603,7 +1696,12 @@ mod tests {
     #[test]
     fn global_recall_hides_private_members_from_other_agents() {
         let (db, path) = temp_db();
-        plant_cluster(&db, "private_topic", &["p1", "p2", "p3", "p4"], "classified aurora plan");
+        plant_cluster(
+            &db,
+            "private_topic",
+            &["p1", "p2", "p3", "p4"],
+            "classified aurora plan",
+        );
         for key in ["p1", "p2", "p3", "p4"] {
             let mut entity = db.get_entity("private_topic", key).unwrap().unwrap();
             entity.agent_id = "alice".to_string();
@@ -1611,34 +1709,49 @@ mod tests {
             db.remember(&entity).unwrap();
         }
         db.detect_communities("", "label_prop", 2).unwrap();
-        let bob = db.global_recall(&GlobalRecallParams {
-            query: "classified aurora plan".to_string(),
-            workspace_hash: String::new(),
-            top_communities: 3,
-            limit: 10,
-            auto_detect: false,
-            use_llm: false,
-            requesting_agent_id: Some("bob".to_string()),
-        }).unwrap();
-        assert!(bob.communities.iter().all(|c| c.members.is_empty()), "{bob:?}");
+        let bob = db
+            .global_recall(&GlobalRecallParams {
+                query: "classified aurora plan".to_string(),
+                workspace_hash: String::new(),
+                top_communities: 3,
+                limit: 10,
+                auto_detect: false,
+                use_llm: false,
+                requesting_agent_id: Some("bob".to_string()),
+            })
+            .unwrap();
+        assert!(
+            bob.communities.iter().all(|c| c.members.is_empty()),
+            "{bob:?}"
+        );
         assert!(!bob.answer.contains("private_topic/"), "{}", bob.answer);
-        let alice = db.global_recall(&GlobalRecallParams {
-            query: "classified aurora plan".to_string(),
-            workspace_hash: String::new(),
-            top_communities: 3,
-            limit: 10,
-            auto_detect: false,
-            use_llm: false,
-            requesting_agent_id: Some("alice".to_string()),
-        }).unwrap();
-        assert!(alice.communities.iter().any(|c| !c.members.is_empty()), "{alice:?}");
+        let alice = db
+            .global_recall(&GlobalRecallParams {
+                query: "classified aurora plan".to_string(),
+                workspace_hash: String::new(),
+                top_communities: 3,
+                limit: 10,
+                auto_detect: false,
+                use_llm: false,
+                requesting_agent_id: Some("alice".to_string()),
+            })
+            .unwrap();
+        assert!(
+            alice.communities.iter().any(|c| !c.members.is_empty()),
+            "{alice:?}"
+        );
         let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn global_recall_auto_detects_when_no_communities_persisted() {
         let (db, path) = temp_db();
-        plant_cluster(&db, "solo", &["s1", "s2", "s3", "s4"], "unique zebra vocabulary");
+        plant_cluster(
+            &db,
+            "solo",
+            &["s1", "s2", "s3", "s4"],
+            "unique zebra vocabulary",
+        );
         // No detect_communities call — global_recall must bootstrap itself.
         let result = db
             .global_recall(&GlobalRecallParams {

@@ -28,7 +28,9 @@ fn assert_no_plaintext_bytes(paths: &[&Path], sentinels: &[&str]) {
         let bytes = std::fs::read(path).unwrap();
         for sentinel in sentinels {
             assert!(
-                !bytes.windows(sentinel.len()).any(|window| window == sentinel.as_bytes()),
+                !bytes
+                    .windows(sentinel.len())
+                    .any(|window| window == sentinel.as_bytes()),
                 "{} retained plaintext sentinel {}",
                 path.display(),
                 sentinel
@@ -719,7 +721,8 @@ fn keygen_refuses_and_init_reuses_an_existing_key_file() {
         "keygen must refuse to overwrite an existing key file"
     );
     assert!(
-        String::from_utf8_lossy(&keygen2.stderr).contains("refusing to overwrite existing key file"),
+        String::from_utf8_lossy(&keygen2.stderr)
+            .contains("refusing to overwrite existing key file"),
         "refusal must name the action: {}",
         String::from_utf8_lossy(&keygen2.stderr)
     );
@@ -752,7 +755,10 @@ fn keygen_refuses_and_init_reuses_an_existing_key_file() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(canary, 1, "init must establish the canary with the existing key");
+    assert_eq!(
+        canary, 1,
+        "init must establish the canary with the existing key"
+    );
     drop(conn);
 
     let _ = std::fs::remove_dir_all(&home);
@@ -767,8 +773,8 @@ fn keygen_refuses_and_init_reuses_an_existing_key_file() {
 // dependency, so the wire format matches by construction).
 #[test]
 fn legacy_mimir_vault_opens_and_recalls_with_current_binary() {
-    use aes_gcm::aead::{Aead, KeyInit, OsRng};
     use aes_gcm::aead::rand_core::RngCore;
+    use aes_gcm::aead::{Aead, KeyInit, OsRng};
     use aes_gcm::{Aes256Gcm, Key, Nonce};
     use base64::Engine as _;
     use std::io::{BufRead, BufReader, Write};
@@ -972,9 +978,7 @@ fn legacy_mimir_vault_opens_and_recalls_with_current_binary() {
                     }
                     if start.elapsed() >= deadline {
                         let _ = child.kill();
-                        panic!(
-                            "serve did not answer id {target} within {deadline:?} — killed it"
-                        );
+                        panic!("serve did not answer id {target} within {deadline:?} — killed it");
                     }
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
@@ -1156,7 +1160,10 @@ fn failed_encryption_migration_does_not_leave_a_valid_canary() {
         ])
         .output()
         .expect("spawn failing migration");
-    assert!(!init.status.success(), "malformed hints must fail migration");
+    assert!(
+        !init.status.success(),
+        "malformed hints must fail migration"
+    );
 
     let conn = rusqlite::Connection::open(&db_path).unwrap();
     let canary_count: i64 = conn
@@ -1188,7 +1195,10 @@ fn failed_encryption_migration_does_not_leave_a_valid_canary() {
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(stored, plaintext, "failed migration must roll back the body write");
+    assert_eq!(
+        stored, plaintext,
+        "failed migration must roll back the body write"
+    );
 
     let _ = std::fs::remove_dir_all(&home);
 }
@@ -1256,7 +1266,9 @@ fn init_encrypts_history_bodies_and_history_fts() {
         "the second write must create a history row"
     );
     assert!(
-        history_bodies.iter().all(|body| !body.contains("history-coverage-first-4c1a")),
+        history_bodies
+            .iter()
+            .all(|body| !body.contains("history-coverage-first-4c1a")),
         "history bodies must not retain plaintext content"
     );
     let history_fts: Vec<String> = conn
@@ -1352,12 +1364,20 @@ fn encrypted_redaction_keeps_marker_encrypted_and_removes_history_fts() {
             |row| row.get(0),
         )
         .unwrap();
-    assert!(!stored.contains("\"redacted\""), "redaction marker must be encrypted");
+    assert!(
+        !stored.contains("\"redacted\""),
+        "redaction marker must be encrypted"
+    );
     assert!(!stored.contains(old_body) && !stored.contains(new_body));
     let history_fts_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM entity_history_fts", [], |row| row.get(0))
+        .query_row("SELECT COUNT(*) FROM entity_history_fts", [], |row| {
+            row.get(0)
+        })
         .unwrap();
-    assert_eq!(history_fts_count, 0, "redaction must remove history FTS rows");
+    assert_eq!(
+        history_fts_count, 0,
+        "redaction must remove history FTS rows"
+    );
     drop(conn);
 
     let doctor = Command::new(BIN)
@@ -1468,7 +1488,12 @@ fn key_rotation_reencrypts_live_history_fts_and_backup() {
     );
 
     let conn = rusqlite::Connection::open(&db_path).unwrap();
-    for table in ["entities", "entity_history", "entities_fts", "entity_history_fts"] {
+    for table in [
+        "entities",
+        "entity_history",
+        "entities_fts",
+        "entity_history_fts",
+    ] {
         let query = format!("SELECT body_json FROM {table}");
         let values: Vec<String> = conn
             .prepare(&query)
@@ -1527,7 +1552,10 @@ fn key_rotation_reencrypts_live_history_fts_and_backup() {
         ])
         .output()
         .expect("spawn wrong-key write");
-    assert!(!old_write.status.success(), "old key must fail after rotation");
+    assert!(
+        !old_write.status.success(),
+        "old key must fail after rotation"
+    );
 
     let backup = Command::new(BIN)
         .env("HOME", &home)
@@ -1568,12 +1596,18 @@ fn key_rotation_reencrypts_live_history_fts_and_backup() {
         "encrypted restore failed: {}",
         String::from_utf8_lossy(&restored.stderr)
     );
-    assert!(restored_path.is_file(), "restore destination must be created");
+    assert!(
+        restored_path.is_file(),
+        "restore destination must be created"
+    );
     let restored_conn = rusqlite::Connection::open(&restored_path).unwrap();
     let restored_check: String = restored_conn
         .query_row("PRAGMA quick_check", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(restored_check, "ok", "restored database must pass quick_check");
+    assert_eq!(
+        restored_check, "ok",
+        "restored database must pass quick_check"
+    );
     let restored_canary: i64 = restored_conn
         .query_row(
             "SELECT COUNT(*) FROM encryption_canary WHERE id = 1",
@@ -1581,7 +1615,10 @@ fn key_rotation_reencrypts_live_history_fts_and_backup() {
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(restored_canary, 1, "restored encrypted database must retain its canary");
+    assert_eq!(
+        restored_canary, 1,
+        "restored encrypted database must retain its canary"
+    );
     drop(restored_conn);
     assert_no_plaintext_bytes(
         &[restored_path.as_path()],
@@ -1589,7 +1626,12 @@ fn key_rotation_reencrypts_live_history_fts_and_backup() {
     );
 
     let backup_conn = rusqlite::Connection::open(&backup_path).unwrap();
-    for table in ["entities", "entity_history", "entities_fts", "entity_history_fts"] {
+    for table in [
+        "entities",
+        "entity_history",
+        "entities_fts",
+        "entity_history_fts",
+    ] {
         let query = format!("SELECT body_json FROM {table}");
         let values: Vec<String> = backup_conn
             .prepare(&query)
@@ -1640,8 +1682,12 @@ fn key_rotation_reencrypts_live_history_fts_and_backup() {
             if sidecar.is_file() {
                 let bytes = std::fs::read(&sidecar).unwrap();
                 assert!(
-                    !bytes.windows(old_body.len()).any(|window| window == old_body.as_bytes())
-                        && !bytes.windows(new_body.len()).any(|window| window == new_body.as_bytes()),
+                    !bytes
+                        .windows(old_body.len())
+                        .any(|window| window == old_body.as_bytes())
+                        && !bytes
+                            .windows(new_body.len())
+                            .any(|window| window == new_body.as_bytes()),
                     "sidecar {} retained plaintext",
                     sidecar.display()
                 );
@@ -1695,9 +1741,18 @@ fn backup_rejects_broken_destination_symlink() {
         ])
         .output()
         .expect("spawn symlink backup");
-    assert!(!backup.status.success(), "backup must refuse a symlink destination");
-    assert!(destination.symlink_metadata().is_ok(), "destination symlink must remain");
-    assert!(!missing_target.exists(), "backup must not follow the broken symlink");
+    assert!(
+        !backup.status.success(),
+        "backup must refuse a symlink destination"
+    );
+    assert!(
+        destination.symlink_metadata().is_ok(),
+        "destination symlink must remain"
+    );
+    assert!(
+        !missing_target.exists(),
+        "backup must not follow the broken symlink"
+    );
 
     let _ = std::fs::remove_dir_all(&home);
 }

@@ -416,9 +416,8 @@ pub fn compute_activation_overlap_with_search(
     decrypt: &dyn Fn(&str, &str, &str) -> String,
     encryption: Option<&crate::encryption::EncryptionManager>,
 ) -> Result<InterferenceReport, String> {
-    let strict_decrypt = |raw: &str, category: &str, key: &str| {
-        Ok::<String, String>(decrypt(raw, category, key))
-    };
+    let strict_decrypt =
+        |raw: &str, category: &str, key: &str| Ok::<String, String>(decrypt(raw, category, key));
     compute_activation_overlap_with_search_strict(
         conn,
         incoming,

@@ -40,27 +40,53 @@ extern "C" {
     fn strtoll(nptr: *const c_char, endptr: *mut *mut c_char, base: c_int) -> c_longlong;
     fn strtoul(nptr: *const c_char, endptr: *mut *mut c_char, base: c_int) -> c_ulong;
     fn strtoull(nptr: *const c_char, endptr: *mut *mut c_char, base: c_int) -> c_ulonglong;
-    fn strtoll_l(nptr: *const c_char, endptr: *mut *mut c_char, base: c_int, loc: locale_t) -> c_longlong;
-    fn strtoull_l(nptr: *const c_char, endptr: *mut *mut c_char, base: c_int, loc: locale_t) -> c_ulonglong;
+    fn strtoll_l(
+        nptr: *const c_char,
+        endptr: *mut *mut c_char,
+        base: c_int,
+        loc: locale_t,
+    ) -> c_longlong;
+    fn strtoull_l(
+        nptr: *const c_char,
+        endptr: *mut *mut c_char,
+        base: c_int,
+        loc: locale_t,
+    ) -> c_ulonglong;
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __isoc23_strtol(nptr: *const c_char, endptr: *mut *mut c_char, base: c_int) -> c_long {
+pub unsafe extern "C" fn __isoc23_strtol(
+    nptr: *const c_char,
+    endptr: *mut *mut c_char,
+    base: c_int,
+) -> c_long {
     strtol(nptr, endptr, base)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __isoc23_strtoll(nptr: *const c_char, endptr: *mut *mut c_char, base: c_int) -> c_longlong {
+pub unsafe extern "C" fn __isoc23_strtoll(
+    nptr: *const c_char,
+    endptr: *mut *mut c_char,
+    base: c_int,
+) -> c_longlong {
     strtoll(nptr, endptr, base)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __isoc23_strtoul(nptr: *const c_char, endptr: *mut *mut c_char, base: c_int) -> c_ulong {
+pub unsafe extern "C" fn __isoc23_strtoul(
+    nptr: *const c_char,
+    endptr: *mut *mut c_char,
+    base: c_int,
+) -> c_ulong {
     strtoul(nptr, endptr, base)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __isoc23_strtoull(nptr: *const c_char, endptr: *mut *mut c_char, base: c_int) -> c_ulonglong {
+pub unsafe extern "C" fn __isoc23_strtoull(
+    nptr: *const c_char,
+    endptr: *mut *mut c_char,
+    base: c_int,
+) -> c_ulonglong {
     strtoull(nptr, endptr, base)
 }
 

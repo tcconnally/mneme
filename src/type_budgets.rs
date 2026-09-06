@@ -65,10 +65,7 @@ impl TypeBudgetProfile {
 pub fn profile_diverse() -> TypeBudgetProfile {
     TypeBudgetProfile {
         name: "diverse",
-        floors: vec![
-            ("decision".into(), 3),
-            ("constraint".into(), 2),
-        ],
+        floors: vec![("decision".into(), 3), ("constraint".into(), 2)],
         caps: vec![
             ("semantic".into(), 15),
             ("episodic".into(), 10),
@@ -165,7 +162,8 @@ pub fn apply(
     limit: usize,
 ) -> (Vec<crate::models::Entity>, AllocationReport) {
     let mut retained: Vec<usize> = Vec::new();
-    let mut class_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut class_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
     let mut floors_met: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 
     // Phase 1: floors, in profile order, each satisfied from the best-scored
@@ -252,7 +250,12 @@ pub fn apply(
 mod tests {
     use super::*;
 
-    fn ent(id: &str, category: &str, memory_type: &str, score: f64) -> (crate::models::Entity, f64) {
+    fn ent(
+        id: &str,
+        category: &str,
+        memory_type: &str,
+        score: f64,
+    ) -> (crate::models::Entity, f64) {
         let e = crate::models::Entity {
             id: id.to_string(),
             category: category.to_string(),
@@ -310,7 +313,12 @@ mod tests {
         // 12 episodic entries outscore the lone decision; limit = 4.
         let mut pool = Vec::new();
         for i in 0..12 {
-            pool.push(ent(&format!("e{i}"), "events", "episodic", 1.0 - i as f64 * 0.01));
+            pool.push(ent(
+                &format!("e{i}"),
+                "events",
+                "episodic",
+                1.0 - i as f64 * 0.01,
+            ));
         }
         pool.push(ent("d1", "decision", "procedural", 0.1));
         let prof = profile_diverse();
@@ -331,7 +339,10 @@ mod tests {
             .find(|a| a.class == "decision")
             .unwrap();
         assert_eq!(dec.retained, 1);
-        assert_eq!(dec.floor_shortfall, 2, "diverse floor is 3, only 1 decision exists");
+        assert_eq!(
+            dec.floor_shortfall, 2,
+            "diverse floor is 3, only 1 decision exists"
+        );
     }
 
     #[test]
@@ -350,7 +361,12 @@ mod tests {
     fn caps_bound_even_without_limit_pressure() {
         let mut pool = Vec::new();
         for i in 0..30 {
-            pool.push(ent(&format!("e{i}"), "events", "episodic", 1.0 - i as f64 * 0.001));
+            pool.push(ent(
+                &format!("e{i}"),
+                "events",
+                "episodic",
+                1.0 - i as f64 * 0.001,
+            ));
         }
         let prof = profile_diverse();
         let (retained, report) = apply(&pool, &prof, 30);

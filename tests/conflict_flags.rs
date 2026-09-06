@@ -22,10 +22,8 @@ struct Fixture {
 
 impl Fixture {
     fn new(name: &str) -> Self {
-        let root = std::env::temp_dir().join(format!(
-            "perseus-vault-917-{name}-{}",
-            uuid::Uuid::new_v4()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("perseus-vault-917-{name}-{}", uuid::Uuid::new_v4()));
         let home = root.join("home");
         let db = root.join("vault.db");
         std::fs::create_dir_all(&home).expect("fixture home");
@@ -125,7 +123,10 @@ impl Server {
             next_id: 1,
         };
         let initialized = server.request("initialize", json!({}));
-        assert!(initialized["result"].is_object(), "initialize failed: {initialized}");
+        assert!(
+            initialized["result"].is_object(),
+            "initialize failed: {initialized}"
+        );
         server.notify("notifications/initialized", json!({}));
         server
     }
@@ -159,11 +160,11 @@ impl Server {
     }
 
     fn call(&mut self, name: &str, arguments: Value) -> Value {
-        let response = self.request(
-            "tools/call",
-            json!({"name": name, "arguments": arguments}),
+        let response = self.request("tools/call", json!({"name": name, "arguments": arguments}));
+        assert!(
+            response["result"].is_object(),
+            "tool response missing result: {response}"
         );
-        assert!(response["result"].is_object(), "tool response missing result: {response}");
         response["result"]["structuredContent"].clone()
     }
 }
@@ -183,7 +184,6 @@ fn conflict_fixture(name: &str) -> (Fixture, String, String) {
     let blue = fixture.write("claim-fixture", "blue", "quantum xylophone jupiter nebula");
     (fixture, red, blue)
 }
-
 
 fn score_verified(server: &mut Server) {
     // score >= 0.7 sets verified=1 (db.rs score_entity) — the claim-card
@@ -217,12 +217,18 @@ fn conflict_cluster_emits_both_sides_validity_and_hash_linked_refs() {
         }),
     );
     let flags = flags(&result);
-    assert!(flags.iter().any(|flag| {
-        flag["candidate_id"] == red && flag["claim_id"] == blue
-    }), "red side missing: {result}");
-    assert!(flags.iter().any(|flag| {
-        flag["candidate_id"] == blue && flag["claim_id"] == red
-    }), "blue side missing: {result}");
+    assert!(
+        flags
+            .iter()
+            .any(|flag| { flag["candidate_id"] == red && flag["claim_id"] == blue }),
+        "red side missing: {result}"
+    );
+    assert!(
+        flags
+            .iter()
+            .any(|flag| { flag["candidate_id"] == blue && flag["claim_id"] == red }),
+        "blue side missing: {result}"
+    );
     for flag in flags {
         assert_eq!(flag["kind"], "contradiction", "{flag}");
         assert_eq!(flag["confidence"], "high", "{flag}");
@@ -236,7 +242,10 @@ fn conflict_cluster_emits_both_sides_validity_and_hash_linked_refs() {
         for evidence in refs {
             assert!(evidence["entity_id"].is_string(), "{evidence}");
             assert!(evidence["card_digest"].is_string(), "{evidence}");
-            assert!(evidence.get("content").is_none(), "raw claim leaked: {evidence}");
+            assert!(
+                evidence.get("content").is_none(),
+                "raw claim leaked: {evidence}"
+            );
         }
     }
     assert_eq!(result["abstain_hint"], true, "{result}");
@@ -295,7 +304,10 @@ fn suppressed_claim_discloses_only_existence_and_never_its_value() {
     assert_eq!(flag["disclose_existence"], true, "{flag}");
     assert_eq!(flag["disclose_value"], false, "{flag}");
     assert_eq!(flag["claim_id"], suppressed, "{flag}");
-    assert!(result.to_string().contains(&visible), "visible side should remain inspectable");
+    assert!(
+        result.to_string().contains(&visible),
+        "visible side should remain inspectable"
+    );
     assert!(
         !result.to_string().contains("forbidden-secret"),
         "suppressed value leaked: {result}"
@@ -326,7 +338,9 @@ fn recall_mutation_summary(path: &Path) -> (Vec<(String, String, i64, String)>, 
         .query_row("SELECT COUNT(*) FROM served_events", [], |row| row.get(0))
         .expect("count served events");
     let arm_audits: i64 = conn
-        .query_row("SELECT COUNT(*) FROM recall_arm_audits", [], |row| row.get(0))
+        .query_row("SELECT COUNT(*) FROM recall_arm_audits", [], |row| {
+            row.get(0)
+        })
         .expect("count recall arm audits");
     (rows, served_events, arm_audits)
 }
@@ -363,7 +377,10 @@ fn flagged_recall_adds_no_mutation_beyond_the_existing_recall_contract() {
             "include_conflict_flags": true
         }),
     );
-    assert!(!flags(&result).is_empty(), "fixture must exercise flags: {result}");
+    assert!(
+        !flags(&result).is_empty(),
+        "fixture must exercise flags: {result}"
+    );
     drop(flagged_server);
 
     assert_eq!(
@@ -403,8 +420,14 @@ fn conflict_flags_are_default_off_and_markdown_is_independently_opt_in() {
             "mode": "fts5"
         }),
     );
-    assert!(default_result.get("conflict_flags").is_none(), "{default_result}");
-    assert!(default_result.get("abstain_hint").is_none(), "{default_result}");
+    assert!(
+        default_result.get("conflict_flags").is_none(),
+        "{default_result}"
+    );
+    assert!(
+        default_result.get("abstain_hint").is_none(),
+        "{default_result}"
+    );
     assert!(
         default_result.get("conflict_flags_markdown").is_none(),
         "{default_result}"
@@ -444,8 +467,14 @@ fn mcp_schema_advertises_opt_in_conflict_flag_arguments() {
     let properties = &recall["inputSchema"]["properties"];
     assert_eq!(properties["include_conflict_flags"]["type"], "boolean");
     assert_eq!(properties["include_conflict_flags"]["default"], false);
-    assert_eq!(properties["include_conflict_flags_markdown"]["type"], "boolean");
-    assert_eq!(properties["include_conflict_flags_markdown"]["default"], false);
+    assert_eq!(
+        properties["include_conflict_flags_markdown"]["type"],
+        "boolean"
+    );
+    assert_eq!(
+        properties["include_conflict_flags_markdown"]["default"],
+        false
+    );
 }
 
 #[allow(dead_code)]

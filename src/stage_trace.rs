@@ -91,7 +91,10 @@ impl StageTrace {
     pub fn push(&mut self, stage: StageRecord) -> Result<(), String> {
         let expected = self.stages.len() as u32;
         if stage.sequence != expected {
-            return Err(format!("stage sequence must be {expected}, got {}", stage.sequence));
+            return Err(format!(
+                "stage sequence must be {expected}, got {}",
+                stage.sequence
+            ));
         }
         self.stages.push(stage);
         self.trace_digest = None;
@@ -125,12 +128,12 @@ impl StageTrace {
     /// pretending that it ran at the same time or latency.
     pub fn replay_fingerprint(&self) -> Result<String, String> {
         self.validate()?;
-        let material: Vec<ReplayStage<'_>> = self
-            .stages
-            .iter()
-            .map(ReplayStage::from)
-            .collect();
-        canonical_digest(&(self.schema_version.as_str(), self.workspace_hash.as_str(), material))
+        let material: Vec<ReplayStage<'_>> = self.stages.iter().map(ReplayStage::from).collect();
+        canonical_digest(&(
+            self.schema_version.as_str(),
+            self.workspace_hash.as_str(),
+            material,
+        ))
     }
 
     pub fn validate_replay(expected: &Self, actual: &Self) -> Result<(), String> {
@@ -145,7 +148,10 @@ impl StageTrace {
 
     fn validate_without_digest(&self) -> Result<(), String> {
         if self.schema_version != STAGE_TRACE_SCHEMA_VERSION {
-            return Err(format!("unsupported schema_version: {}", self.schema_version));
+            return Err(format!(
+                "unsupported schema_version: {}",
+                self.schema_version
+            ));
         }
         validate_identifier("trace_id", &self.trace_id)?;
         validate_identifier("workspace_hash", &self.workspace_hash)?;
@@ -168,7 +174,10 @@ impl StageTrace {
                     return Err(format!("stage {} ends before it starts", stage.stage));
                 }
             } else if stage.outcome != "in_progress" {
-                return Err(format!("incomplete stage {} must be in_progress", stage.stage));
+                return Err(format!(
+                    "incomplete stage {} must be in_progress",
+                    stage.stage
+                ));
             }
             if !STAGE_OUTCOMES.contains(&stage.outcome.as_str()) {
                 return Err(format!("unsupported outcome: {}", stage.outcome));
@@ -191,7 +200,12 @@ impl StageTrace {
                     validate_sha256(value)?;
                 }
             }
-            for value in [&stage.deadline_class, &stage.priority_class, &stage.model_provider, &stage.reason_code] {
+            for value in [
+                &stage.deadline_class,
+                &stage.priority_class,
+                &stage.model_provider,
+                &stage.reason_code,
+            ] {
                 if let Some(value) = value {
                     validate_identifier("stage metadata", value)?;
                 }
@@ -204,7 +218,12 @@ impl StageTrace {
     }
 
     fn compute_digest(&self) -> Result<String, String> {
-        let material = (&self.schema_version, &self.trace_id, &self.workspace_hash, &self.stages);
+        let material = (
+            &self.schema_version,
+            &self.trace_id,
+            &self.workspace_hash,
+            &self.stages,
+        );
         canonical_digest(&material)
     }
 }
@@ -241,22 +260,32 @@ impl<'a> From<&'a StageRecord> for ReplayStage<'a> {
 }
 
 fn canonical_digest<T: Serialize>(value: &T) -> Result<String, String> {
-    let bytes = serde_json::to_vec(value).map_err(|e| format!("trace serialization failed: {e}"))?;
+    let bytes =
+        serde_json::to_vec(value).map_err(|e| format!("trace serialization failed: {e}"))?;
     let mut digest = Sha256::new();
     digest.update(bytes);
     Ok(format!("{:x}", digest.finalize()))
 }
 
 fn validate_sha256(value: &str) -> Result<(), String> {
-    if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()) {
+    if value.len() != 64
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
         return Err("digest must be a lowercase SHA-256 value".to_string());
     }
     Ok(())
 }
 
 fn validate_identifier(label: &str, value: &str) -> Result<(), String> {
-    if value.is_empty() || value.len() > 256 || value.chars().any(|c| c.is_control() || c.is_whitespace()) {
-        return Err(format!("{label} must be a bounded non-whitespace identifier"));
+    if value.is_empty()
+        || value.len() > 256
+        || value.chars().any(|c| c.is_control() || c.is_whitespace())
+    {
+        return Err(format!(
+            "{label} must be a bounded non-whitespace identifier"
+        ));
     }
     Ok(())
 }
@@ -293,9 +322,15 @@ mod tests {
 
     fn complete_trace() -> StageTrace {
         let mut trace = StageTrace::new("trace-1", "workspace-a");
-        trace.push(stage("context_candidate_generation", 0, "completed")).unwrap();
-        trace.push(stage("context_selection", 1, "completed")).unwrap();
-        trace.push(stage("validation_provenance", 2, "completed")).unwrap();
+        trace
+            .push(stage("context_candidate_generation", 0, "completed"))
+            .unwrap();
+        trace
+            .push(stage("context_selection", 1, "completed"))
+            .unwrap();
+        trace
+            .push(stage("validation_provenance", 2, "completed"))
+            .unwrap();
         trace.seal().unwrap()
     }
 
@@ -324,9 +359,15 @@ mod tests {
     #[test]
     fn rejects_reordered_duplicate_and_cross_scope_stages() {
         let mut trace = StageTrace::new("trace-invalid", "workspace-a");
-        assert!(trace.push(stage("context_selection", 1, "completed")).is_err());
-        trace.push(stage("context_candidate_generation", 0, "completed")).unwrap();
-        assert!(trace.push(stage("context_candidate_generation", 1, "completed")).is_ok());
+        assert!(trace
+            .push(stage("context_selection", 1, "completed"))
+            .is_err());
+        trace
+            .push(stage("context_candidate_generation", 0, "completed"))
+            .unwrap();
+        assert!(trace
+            .push(stage("context_candidate_generation", 1, "completed"))
+            .is_ok());
         assert!(trace.validate().is_err());
 
         let mut scope = complete_trace();
@@ -347,7 +388,9 @@ mod tests {
     #[test]
     fn rejects_raw_like_causal_keys_and_uppercase_digest() {
         let mut trace = complete_trace();
-        trace.stages[0].causal_links.insert("raw_prompt".to_string(), "x".to_string());
+        trace.stages[0]
+            .causal_links
+            .insert("raw_prompt".to_string(), "x".to_string());
         trace.trace_digest = None;
         assert!(trace.validate().is_err());
         assert!(validate_sha256(&"A".repeat(64)).is_err());

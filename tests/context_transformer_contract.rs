@@ -7,7 +7,7 @@ mod source_chain;
 
 use context_transform::{
     digest_messages, replay_membership, transform_context, BoundedReference, ContextMessage,
-    ContextTransformRequest, ReplayPlan, ReplayMembership, TransformStage, TransformerDescriptor,
+    ContextTransformRequest, ReplayMembership, ReplayPlan, TransformStage, TransformerDescriptor,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -371,7 +371,10 @@ fn public_receipts_expose_only_source_chain_commitments() {
         "valid_from_unix_ms",
         "valid_to_unix_ms",
     ] {
-        assert!(source_chain.get(field).is_none(), "unexpected public field: {field}");
+        assert!(
+            source_chain.get(field).is_none(),
+            "unexpected public field: {field}"
+        );
     }
     let unknown = serde_json::to_value(source_chain::SourceChainIdentity::unknown())
         .expect("unknown source-chain projection");
@@ -387,10 +390,15 @@ fn public_receipts_expose_only_source_chain_commitments() {
         disposition: "omitted".to_string(),
         source_chain: source_chain::SourceChainIdentity::unknown(),
     };
-    let unknown_membership_public = serde_json::to_value(unknown_membership)
-        .expect("unknown membership projection");
-    assert_eq!(unknown_membership_public["source_chain"]["status"], json!("unknown"));
-    assert!(unknown_membership_public["source_chain"].get("commitment_sha256").is_none());
+    let unknown_membership_public =
+        serde_json::to_value(unknown_membership).expect("unknown membership projection");
+    assert_eq!(
+        unknown_membership_public["source_chain"]["status"],
+        json!("unknown")
+    );
+    assert!(unknown_membership_public["source_chain"]
+        .get("commitment_sha256")
+        .is_none());
 }
 
 #[test]
@@ -411,16 +419,14 @@ fn source_chain_change_is_not_treated_as_retained_content() {
         "unchanged content".into(),
     )
     .with_source_chain(first)];
-    let proposed = vec![
-        message(
-            "lineage-1",
-            0,
-            "assistant_prose",
-            "assistant",
-            "unchanged content".into(),
-        )
-        .with_source_chain(second),
-    ];
+    let proposed = vec![message(
+        "lineage-1",
+        0,
+        "assistant_prose",
+        "assistant",
+        "unchanged content".into(),
+    )
+    .with_source_chain(second)];
     let decision = transform_context(
         &request(input, "reversible", "trusted", true),
         proposed,
@@ -428,7 +434,10 @@ fn source_chain_change_is_not_treated_as_retained_content() {
     )
     .expect("lineage change remains auditable");
     assert_eq!(decision.receipt.outcome, "transformed");
-    assert!(decision.receipt.changed_content_classes.contains(&"assistant_prose".to_string()));
+    assert!(decision
+        .receipt
+        .changed_content_classes
+        .contains(&"assistant_prose".to_string()));
 }
 
 #[test]
@@ -544,10 +553,14 @@ fn replay_preserves_source_chain_identity_commitments() {
         }
     }))
     .expect("source-chain identity");
-    let input = vec![
-        message("assistant-1", 0, "assistant_prose", "assistant", "keep this".into())
-            .with_source_chain(identity.clone()),
-    ];
+    let input = vec![message(
+        "assistant-1",
+        0,
+        "assistant_prose",
+        "assistant",
+        "keep this".into(),
+    )
+    .with_source_chain(identity.clone())];
     let mut proposed = input.clone();
     proposed[0].message["content"] = json!("changed");
     let decision = transform_context(
@@ -560,7 +573,10 @@ fn replay_preserves_source_chain_identity_commitments() {
     assert_eq!(replay.membership[0].source_chain, identity);
     let replayed = context_transform::replay_membership(replay, &input).expect("replay");
     assert_eq!(replayed.ordered_source_ids, vec!["assistant-1"]);
-    assert_eq!(replayed.source_chain_commitments, vec![Some(identity.commitment().to_string())]);
+    assert_eq!(
+        replayed.source_chain_commitments,
+        vec![Some(identity.commitment().to_string())]
+    );
 }
 
 #[test]

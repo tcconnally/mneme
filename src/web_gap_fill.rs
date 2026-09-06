@@ -145,11 +145,7 @@ pub fn parse_source_url(raw: &str) -> Result<String, String> {
         return Err(format!("unsupported source scheme: {raw}"));
     };
     // Authority ends at the first '/', '?', or '#'.
-    let authority = rest
-        .split(['/', '?', '#'])
-        .next()
-        .unwrap_or("")
-        .trim();
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("").trim();
     if authority.is_empty() {
         return Err(format!("source URL has no host: {raw}"));
     }
@@ -190,10 +186,10 @@ pub fn parse_source_url(raw: &str) -> Result<String, String> {
     if host.starts_with("0x") || host.starts_with("0X") {
         return Err(format!("source host uses an encoded numeric form: {raw}"));
     }
-    if !host.bytes().any(|b| b.is_ascii_alphabetic())
-        && host.parse::<std::net::IpAddr>().is_err()
-    {
-        return Err(format!("source host is neither a hostname nor a valid IP literal: {raw}"));
+    if !host.bytes().any(|b| b.is_ascii_alphabetic()) && host.parse::<std::net::IpAddr>().is_err() {
+        return Err(format!(
+            "source host is neither a hostname nor a valid IP literal: {raw}"
+        ));
     }
     Ok(host.to_string())
 }
@@ -236,21 +232,28 @@ pub fn host_is_private_literal(host: &str) -> bool {
 pub fn scan_secrets(content: &str) -> Option<&'static str> {
     let alnum_tail = |start: usize, min: usize| -> bool {
         let tail = &content[start..];
-        let n = tail.chars().take_while(|c| c.is_ascii_alphanumeric()).count();
+        let n = tail
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric())
+            .count();
         n >= min
     };
     let token_tail = |start: usize, min: usize| -> bool {
         let tail = &content[start..];
         let n = tail
             .chars()
-            .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '~' | '+' | '/' | '=' | '-'))
+            .take_while(|c| {
+                c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '~' | '+' | '/' | '=' | '-')
+            })
             .count();
         n >= min
     };
     for (i, c) in content.char_indices() {
         match c {
             's' | 'S'
-                if content[i..].get(..3).is_some_and(|p| p.eq_ignore_ascii_case("sk-"))
+                if content[i..]
+                    .get(..3)
+                    .is_some_and(|p| p.eq_ignore_ascii_case("sk-"))
                     && alnum_tail(i + 3, 20) =>
             {
                 return Some("openai_key")
@@ -267,7 +270,9 @@ pub fn scan_secrets(content: &str) -> Option<&'static str> {
                 }
             }
             'A' | 'a'
-                if content[i..].get(..4).is_some_and(|p| p.eq_ignore_ascii_case("AKIA"))
+                if content[i..]
+                    .get(..4)
+                    .is_some_and(|p| p.eq_ignore_ascii_case("AKIA"))
                     && alnum_tail(i + 4, 16) =>
             {
                 return Some("aws_access_key")
@@ -282,13 +287,17 @@ pub fn scan_secrets(content: &str) -> Option<&'static str> {
                 return Some("slack_token")
             }
             'A' | 'a'
-                if content[i..].get(..4).is_some_and(|p| p.eq_ignore_ascii_case("AIza"))
+                if content[i..]
+                    .get(..4)
+                    .is_some_and(|p| p.eq_ignore_ascii_case("AIza"))
                     && token_tail(i + 4, 35) =>
             {
                 return Some("google_api_key")
             }
             'y' | 'Y'
-                if content[i..].get(..5).is_some_and(|p| p.eq_ignore_ascii_case("ya29."))
+                if content[i..]
+                    .get(..5)
+                    .is_some_and(|p| p.eq_ignore_ascii_case("ya29."))
                     && token_tail(i + 5, 10) =>
             {
                 return Some("google_oauth")
@@ -299,21 +308,27 @@ pub fn scan_secrets(content: &str) -> Option<&'static str> {
                 return Some("private_key")
             }
             'B' | 'b'
-                if content[i..].get(..7).map(|s| s.eq_ignore_ascii_case("bearer "))
+                if content[i..]
+                    .get(..7)
+                    .map(|s| s.eq_ignore_ascii_case("bearer "))
                     == Some(true)
                     && token_tail(i + 7, 20) =>
             {
                 return Some("bearer_token")
             }
             'A' | 'a'
-                if content[i..].get(..14).map(|s| s.eq_ignore_ascii_case("authorization:"))
+                if content[i..]
+                    .get(..14)
+                    .map(|s| s.eq_ignore_ascii_case("authorization:"))
                     == Some(true)
                     && content[i + 14..].chars().any(|c| !c.is_whitespace()) =>
             {
                 return Some("authorization_header")
             }
             'e' | 'E'
-                if content[i..].get(..3).is_some_and(|p| p.eq_ignore_ascii_case("eyJ")) =>
+                if content[i..]
+                    .get(..3)
+                    .is_some_and(|p| p.eq_ignore_ascii_case("eyJ")) =>
             {
                 // JWT: eyJ<seg>.<seg>.<seg> with bounded segment lengths.
                 let rest = &content[i..];
@@ -366,11 +381,8 @@ pub fn check_and_bump_rate(
     let conn = db
         .conn()
         .map_err(|e| format!("rate-limit state open failed: {e}"))?;
-    let tx = rusqlite::Transaction::new_unchecked(
-        &conn,
-        rusqlite::TransactionBehavior::Immediate,
-    )
-    .map_err(|e| format!("rate-limit lock failed: {e}"))?;
+    let tx = rusqlite::Transaction::new_unchecked(&conn, rusqlite::TransactionBehavior::Immediate)
+        .map_err(|e| format!("rate-limit lock failed: {e}"))?;
     // Read inside the lock; expired rows count as 0 (window rollover).
     // Anything that is not a valid non-negative count fails CLOSED.
     let count: i64 = match tx.query_row(
@@ -405,7 +417,8 @@ pub fn check_and_bump_rate(
         rusqlite::params![key, (count + 1).to_string(), now + 7_200_000, now],
     )
     .map_err(|e| format!("rate-limit state write failed: {e}"))?;
-    tx.commit().map_err(|e| format!("rate-limit state commit failed: {e}"))
+    tx.commit()
+        .map_err(|e| format!("rate-limit state commit failed: {e}"))
 }
 
 /// Deterministic entity key for fetched content: `web-<sha256(content)[..16]>`.
@@ -443,7 +456,11 @@ mod tests {
     fn allowlist_parses_workspace_and_wildcard_entries() {
         let _guard = crate::web_gap_fill::ENV_LOCK.lock().unwrap();
         let path = std::env::temp_dir().join(format!("pv-allow-{}.json", std::process::id()));
-        std::fs::write(&path, r#"{"ws-a": ["docs.example.com", "en.wikipedia.org"], "*": ["fallback.org"]}"#).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"ws-a": ["docs.example.com", "en.wikipedia.org"], "*": ["fallback.org"]}"#,
+        )
+        .unwrap();
         std::env::set_var("PERSEUS_VAULT_WEB_ALLOWLIST", &path);
         let al = load_allowlist().expect("parse");
         assert_eq!(al.get("ws-a").unwrap().len(), 2);
@@ -453,7 +470,10 @@ mod tests {
             workspace_allowed_hosts(&al, "ws-a").unwrap(),
             &["docs.example.com", "en.wikipedia.org"]
         );
-        assert_eq!(workspace_allowed_hosts(&al, "ws-other").unwrap(), &["fallback.org"]);
+        assert_eq!(
+            workspace_allowed_hosts(&al, "ws-other").unwrap(),
+            &["fallback.org"]
+        );
         assert_eq!(workspace_allowed_hosts(&al, ""), None);
         std::env::remove_var("PERSEUS_VAULT_WEB_ALLOWLIST");
         let _ = std::fs::remove_file(&path);
@@ -474,9 +494,15 @@ mod tests {
         let path = std::env::temp_dir().join(format!("pv-allow-bad-{}.json", std::process::id()));
         std::fs::write(&path, "not json").unwrap();
         std::env::set_var("PERSEUS_VAULT_WEB_ALLOWLIST", &path);
-        assert!(load_allowlist().is_err(), "malformed allowlist must fail closed");
+        assert!(
+            load_allowlist().is_err(),
+            "malformed allowlist must fail closed"
+        );
         std::fs::write(&path, "x".repeat(70 * 1024)).unwrap();
-        assert!(load_allowlist().is_err(), "oversized allowlist must fail closed");
+        assert!(
+            load_allowlist().is_err(),
+            "oversized allowlist must fail closed"
+        );
         std::env::remove_var("PERSEUS_VAULT_WEB_ALLOWLIST");
         let _ = std::fs::remove_file(&path);
     }
@@ -494,10 +520,22 @@ mod tests {
 
     #[test]
     fn parse_source_url_accepts_http_https_and_extracts_host() {
-        assert_eq!(parse_source_url("https://docs.example.com/page").unwrap(), "docs.example.com");
-        assert_eq!(parse_source_url("http://example.org").unwrap(), "example.org");
-        assert_eq!(parse_source_url("https://example.org:8443/x").unwrap(), "example.org");
-        assert_eq!(parse_source_url("HTTPS://EXAMPLE.ORG/").unwrap(), "EXAMPLE.ORG");
+        assert_eq!(
+            parse_source_url("https://docs.example.com/page").unwrap(),
+            "docs.example.com"
+        );
+        assert_eq!(
+            parse_source_url("http://example.org").unwrap(),
+            "example.org"
+        );
+        assert_eq!(
+            parse_source_url("https://example.org:8443/x").unwrap(),
+            "example.org"
+        );
+        assert_eq!(
+            parse_source_url("HTTPS://EXAMPLE.ORG/").unwrap(),
+            "EXAMPLE.ORG"
+        );
     }
 
     #[test]
@@ -539,12 +577,23 @@ mod tests {
         // #929 review: CGNAT, IETF protocol assignments, benchmarking,
         // reserved, and limited broadcast.
         for ip in [
-            "100.64.0.1", "100.127.255.255", "192.0.0.1", "198.18.0.1",
-            "198.19.255.255", "240.0.0.1", "255.255.255.255",
+            "100.64.0.1",
+            "100.127.255.255",
+            "192.0.0.1",
+            "198.18.0.1",
+            "198.19.255.255",
+            "240.0.0.1",
+            "255.255.255.255",
         ] {
             assert!(host_is_private_literal(ip), "must flag {ip}");
         }
-        for ip in ["100.63.255.255", "100.128.0.1", "198.17.0.1", "198.20.0.1", "8.8.8.8"] {
+        for ip in [
+            "100.63.255.255",
+            "100.128.0.1",
+            "198.17.0.1",
+            "198.20.0.1",
+            "8.8.8.8",
+        ] {
             assert!(!host_is_private_literal(ip), "must allow {ip}");
         }
     }
@@ -561,11 +610,20 @@ mod tests {
         // #929 review: canonical prefixes matched case-insensitively so
         // trivial case obfuscation cannot evade the scan.
         let cases: Vec<(String, &'static str)> = vec![
-            (fuse("token SK", "-abcdefghijklmnopqrstuvwxyz123"), "openai_key"),
-            (fuse("token ghp", "_abcdefghijklmnopqrstuvwxyz1234567"), "github_token"),
+            (
+                fuse("token SK", "-abcdefghijklmnopqrstuvwxyz123"),
+                "openai_key",
+            ),
+            (
+                fuse("token ghp", "_abcdefghijklmnopqrstuvwxyz1234567"),
+                "github_token",
+            ),
             (fuse("token AkIa", "ABCDEFGHIJKLMNOPQRST"), "aws_access_key"),
             (fuse("token XOXB", "-abcdefghijklmnop"), "slack_token"),
-            (fuse("token AIZA", "abcdefghijklmnopqrstuvwxyz1234567890"), "google_api_key"),
+            (
+                fuse("token AIZA", "abcdefghijklmnopqrstuvwxyz1234567890"),
+                "google_api_key",
+            ),
             (fuse("token YA29", ".abcdefghijklmnop"), "google_oauth"),
             (
                 fuse("token eyJhbGciOiJIUzI1NiJ9", ".eyJzdWIiOiIxMjM0NTY3ODkwIn0")
@@ -581,16 +639,35 @@ mod tests {
     #[test]
     fn private_literal_ranges_are_detected() {
         for ip in [
-            "127.0.0.1", "10.0.0.1", "10.255.255.255", "172.16.0.1", "172.31.255.255",
-            "192.168.1.1", "169.254.169.254", "0.0.0.0", "224.0.0.1", "192.0.2.1",
-            "198.51.100.7", "203.0.113.9", "::1", "fc00::1", "fe80::1", "::",
+            "127.0.0.1",
+            "10.0.0.1",
+            "10.255.255.255",
+            "172.16.0.1",
+            "172.31.255.255",
+            "192.168.1.1",
+            "169.254.169.254",
+            "0.0.0.0",
+            "224.0.0.1",
+            "192.0.2.1",
+            "198.51.100.7",
+            "203.0.113.9",
+            "::1",
+            "fc00::1",
+            "fe80::1",
+            "::",
             "2001:db8::1",
         ] {
-            assert!(host_is_private_literal(ip), "{ip} must be treated as private/reserved");
+            assert!(
+                host_is_private_literal(ip),
+                "{ip} must be treated as private/reserved"
+            );
         }
         assert!(!host_is_private_literal("8.8.8.8"));
         assert!(!host_is_private_literal("93.184.216.34"));
-        assert!(!host_is_private_literal("docs.example.com"), "hostnames are not literals");
+        assert!(
+            !host_is_private_literal("docs.example.com"),
+            "hostnames are not literals"
+        );
     }
 
     #[test]
@@ -602,21 +679,42 @@ mod tests {
             "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
         );
         let cases: Vec<(String, &'static str)> = vec![
-            (fuse("token sk", "-abcdefghijklmnopqrstuvwxyz123"), "openai_key"),
-            (fuse("push ghp", "_abcdefghijklmnopqrstuvwxyz1234567"), "github_token"),
+            (
+                fuse("token sk", "-abcdefghijklmnopqrstuvwxyz123"),
+                "openai_key",
+            ),
+            (
+                fuse("push ghp", "_abcdefghijklmnopqrstuvwxyz1234567"),
+                "github_token",
+            ),
             (fuse("key AKIA", "IOABCDEFGHIJKLMNOPQRST"), "aws_access_key"),
             (fuse("xoxb", "-abcdefghijklmnop"), "slack_token"),
-            (fuse("AIza", "Syabcdefghijklmnopqrstuvwxyz1234567890"), "google_api_key"),
-            (fuse("ya29.", "a0AfH6SMCc9abcdefghijklmnopqrstuv"), "google_oauth"),
             (
-                fuse(fuse("-----BEGIN ", "RSA PRIVATE KEY-----"), "\nMIIEowIwDQYJKoZIhvcNAQELBQA"),
+                fuse("AIza", "Syabcdefghijklmnopqrstuvwxyz1234567890"),
+                "google_api_key",
+            ),
+            (
+                fuse("ya29.", "a0AfH6SMCc9abcdefghijklmnopqrstuv"),
+                "google_oauth",
+            ),
+            (
+                fuse(
+                    fuse("-----BEGIN ", "RSA PRIVATE KEY-----"),
+                    "\nMIIEowIwDQYJKoZIhvcNAQELBQA",
+                ),
                 "private_key",
             ),
             (
-                fuse("Authorization: ", fuse("Bearer ", "abcdefghijklmnopqrstuvwxyz123456")),
+                fuse(
+                    "Authorization: ",
+                    fuse("Bearer ", "abcdefghijklmnopqrstuvwxyz123456"),
+                ),
                 "authorization_header",
             ),
-            (fuse("Bearer ", "abcdefghijklmnopqrstuvwxyz123456"), "bearer_token"),
+            (
+                fuse("Bearer ", "abcdefghijklmnopqrstuvwxyz123456"),
+                "bearer_token",
+            ),
             (jwt.clone(), "jwt"),
         ];
         for (content, class) in cases {
@@ -645,7 +743,11 @@ mod tests {
 
     fn temp_db() -> (crate::db::Database, String) {
         let path = std::env::temp_dir()
-            .join(format!("web-gap-fill-{}-{}.db", std::process::id(), uuid::Uuid::new_v4().simple()))
+            .join(format!(
+                "web-gap-fill-{}-{}.db",
+                std::process::id(),
+                uuid::Uuid::new_v4().simple()
+            ))
             .to_string_lossy()
             .to_string();
         let _ = std::fs::remove_file(&path);

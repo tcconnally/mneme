@@ -188,14 +188,13 @@ pub fn resolve(db: &crate::db::Database, ctx: &DeploymentContext) -> DeploymentP
     // while the LLM integration is off; bundled backend disabled). Reported
     // explicitly — never silently reclassified as empty success.
     let emb_degraded = emb_configured
-        && ((emb_kind == "provider" && !llm_enabled) || (emb_kind == "bundled" && !db.embedding_enabled()));
+        && ((emb_kind == "provider" && !llm_enabled)
+            || (emb_kind == "bundled" && !db.embedding_enabled()));
     let emb_available = match emb_kind.as_str() {
         "bundled" => db.embedding_enabled(),
         // A provider endpoint is only usable when the LLM integration that
         // would call it is actually enabled.
-        "provider" => {
-            llm_enabled && !embedding_endpoint.as_deref().unwrap_or("").is_empty()
-        }
+        "provider" => llm_enabled && !embedding_endpoint.as_deref().unwrap_or("").is_empty(),
         _ => false,
     };
     let semantic_recall = db.readiness().semantic_recall().to_string();
@@ -258,8 +257,7 @@ pub fn resolve(db: &crate::db::Database, ctx: &DeploymentContext) -> DeploymentP
         || matches!(
             storage_state.as_str(),
             "encrypted" | "encrypted-incomplete" | "mixed-legacy"
-        )
-    {
+        ) {
         "aes_256_gcm"
     } else {
         "plaintext"
@@ -301,7 +299,8 @@ pub fn resolve(db: &crate::db::Database, ctx: &DeploymentContext) -> DeploymentP
     };
 
     DeploymentProfile {
-        profile: profile.to_string(),        resolved_at_unix_ms: now,
+        profile: profile.to_string(),
+        resolved_at_unix_ms: now,
         model_backend: ModelBackend {
             kind: model_kind,
             model: llm_model,
@@ -350,7 +349,10 @@ mod tests {
     #[test]
     fn host_extraction_and_loopback() {
         assert_eq!(host_of("http://localhost:11434/api/generate"), "localhost");
-        assert_eq!(host_of("https://api.openai.com/v1/embeddings"), "api.openai.com");
+        assert_eq!(
+            host_of("https://api.openai.com/v1/embeddings"),
+            "api.openai.com"
+        );
         assert!(is_loopback_host("localhost"));
         assert!(is_loopback_host("127.0.0.1"));
         assert!(is_loopback_host("127.8.8.8"));
@@ -380,7 +382,11 @@ mod integration {
         db.set_deployment_context(true, true, "0.0.0.0", false, false);
         let p = resolve(&db, db.deployment_context());
         assert_eq!(p.profile, "offline");
-        assert_eq!(p.network.listeners, vec!["mcp_stdio"], "offline: web disabled");
+        assert_eq!(
+            p.network.listeners,
+            vec!["mcp_stdio"],
+            "offline: web disabled"
+        );
         assert!(p.network.egress_hosts.is_empty(), "offline: no egress");
         assert!(p.connectors.is_empty());
         assert_eq!(p.external_mutations, "disabled");
@@ -406,7 +412,10 @@ mod integration {
         // dense arm degrades gracefully on lite builds).
         let mut f = r.clone();
         f.mode = crate::models::SearchMode::Fused;
-        assert!(db.recall(&f).is_ok(), "fused (graph/temporal/dense) in offline");
+        assert!(
+            db.recall(&f).is_ok(),
+            "fused (graph/temporal/dense) in offline"
+        );
         let _ = std::fs::remove_file(&path);
     }
 
@@ -416,7 +425,10 @@ mod integration {
         db.set_deployment_context(false, true, "127.0.0.1", false, false);
         let p = resolve(&db, db.deployment_context());
         assert_eq!(p.profile, "local_only");
-        assert!(p.network.listeners.contains(&"web_dashboard(127.0.0.1)".to_string()));
+        assert!(p
+            .network
+            .listeners
+            .contains(&"web_dashboard(127.0.0.1)".to_string()));
         assert!(p.network.loopback_only);
         assert_eq!(p.cloud_provider_use, "none");
         let _ = std::fs::remove_file(&path);
@@ -438,7 +450,10 @@ mod integration {
         assert_eq!(p.profile, "local_with_approved_network");
         assert!(p.network.egress_hosts.contains(&"10.0.0.5".to_string()));
         assert!(p.cloud_provider_use.contains("10.0.0.5"));
-        assert!(!p.cloud_provider_use.contains("api/generate"), "sanitized: no URL paths");
+        assert!(
+            !p.cloud_provider_use.contains("api/generate"),
+            "sanitized: no URL paths"
+        );
         assert_eq!(p.model_backend.kind, "provider");
         let _ = std::fs::remove_file(&path);
     }
@@ -503,7 +518,10 @@ mod integration {
         let (mut db, path) = temp_db();
         db.set_deployment_context(false, false, "127.0.0.1", false, false);
         let p = resolve(&db, db.deployment_context());
-        assert!(matches!(p.encryption.at_rest.as_str(), "aes_256_gcm" | "plaintext"));
+        assert!(matches!(
+            p.encryption.at_rest.as_str(),
+            "aes_256_gcm" | "plaintext"
+        ));
         assert!(!p.encryption.storage_state.is_empty());
         assert!(p.raw_retention.memory_bodies.contains("retained_at_rest"));
         assert_eq!(p.raw_retention.raw_logs, "digest_only");
@@ -528,7 +546,10 @@ mod integration {
             r#"{"note":"profile state"}"#,
         ))
         .unwrap();
-        db.conn().unwrap().execute("DELETE FROM entities_fts", []).unwrap();
+        db.conn()
+            .unwrap()
+            .execute("DELETE FROM entities_fts", [])
+            .unwrap();
 
         let reopened = crate::db::Database::open(&path).unwrap();
         let profile = resolve(&reopened, reopened.deployment_context());
@@ -548,7 +569,10 @@ mod integration {
         let raw = handle_deployment_profile(&db, serde_json::json!({})).expect("profile tool");
         let v: Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(v["profile"], "local_only");
-        assert!(v["network"]["listeners"].as_array().unwrap().contains(&"mcp_stdio".into()));
+        assert!(v["network"]["listeners"]
+            .as_array()
+            .unwrap()
+            .contains(&"mcp_stdio".into()));
         let health = handle_health(&db);
         let hv: Value = serde_json::from_str(&health).unwrap();
         assert_eq!(hv["deployment_profile"]["profile"], "local_only");

@@ -11,9 +11,7 @@
 use rusqlite::{Connection, OptionalExtension};
 
 /// Check table (C1–C7 always; C8 only in strict mode).
-pub const CHECK_IDS: [&str; 8] = [
-    "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8",
-];
+pub const CHECK_IDS: [&str; 8] = ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
@@ -118,9 +116,9 @@ fn c1_secret_shapes(conn: &Connection) -> CheckResult {
         };
     }
     let mut findings = Vec::new();
-    let mut stmt = match conn.prepare(
-        "SELECT id, category, key, body_json FROM entities WHERE archived = 0",
-    ) {
+    let mut stmt = match conn
+        .prepare("SELECT id, category, key, body_json FROM entities WHERE archived = 0")
+    {
         Ok(s) => s,
         Err(_) => {
             return CheckResult {
@@ -140,7 +138,8 @@ fn c1_secret_shapes(conn: &Connection) -> CheckResult {
                 r.get::<_, String>(3)?,
             ))
         })
-        .and_then(|rows| rows.collect::<Result<Vec<_>, _>>()).unwrap_or_default();
+        .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
+        .unwrap_or_default();
     let mut secret_key_hits = 0usize;
     let mut shape_hits = 0usize;
     for row in rows {
@@ -158,7 +157,9 @@ fn c1_secret_shapes(conn: &Connection) -> CheckResult {
             if lower.contains(needle) {
                 shape_hits += 1;
                 if findings.len() < MAX_FINDINGS {
-                    findings.push(format!("{id}:{category}/{key} (secret-shaped value: {shape})"));
+                    findings.push(format!(
+                        "{id}:{category}/{key} (secret-shaped value: {shape})"
+                    ));
                 }
                 break;
             }
@@ -170,10 +171,19 @@ fn c1_secret_shapes(conn: &Connection) -> CheckResult {
             if let Some(obj) = v.as_object() {
                 for (k, val) in obj {
                     let kk = k.to_lowercase();
-                    let secret_named = ["token", "secret", "api_key", "apikey", "password",
-                        "passwd", "bearer", "authorization", "private_key"]
-                        .iter()
-                        .any(|s| kk.contains(s));
+                    let secret_named = [
+                        "token",
+                        "secret",
+                        "api_key",
+                        "apikey",
+                        "password",
+                        "passwd",
+                        "bearer",
+                        "authorization",
+                        "private_key",
+                    ]
+                    .iter()
+                    .any(|s| kk.contains(s));
                     if secret_named {
                         if let Some(s) = val.as_str() {
                             let redacted = s.contains("[REDACTED]")
@@ -197,11 +207,17 @@ fn c1_secret_shapes(conn: &Connection) -> CheckResult {
     let total = shape_hits + secret_key_hits;
     let mut note = None;
     if total > 0 && findings.len() >= MAX_FINDINGS {
-        note = Some(format!("{total} hits; findings truncated to {MAX_FINDINGS}"));
+        note = Some(format!(
+            "{total} hits; findings truncated to {MAX_FINDINGS}"
+        ));
     }
     CheckResult {
         id: "C1",
-        status: if total > 0 { Status::Fail } else { Status::Pass },
+        status: if total > 0 {
+            Status::Fail
+        } else {
+            Status::Pass
+        },
         findings,
         note,
     }
@@ -216,7 +232,9 @@ fn c2_plaintext_payload(value: &str) -> bool {
     trimmed.is_empty()
         || serde_json::from_str::<serde_json::Value>(trimmed).is_ok()
         || value.len() < 40
-        || !value.bytes().all(|byte| byte.is_ascii_alphanumeric() || b"+/=".contains(&byte))
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"+/=".contains(&byte))
 }
 
 fn c2_encrypted_at_rest(conn: &Connection) -> CheckResult {
@@ -225,7 +243,9 @@ fn c2_encrypted_at_rest(conn: &Connection) -> CheckResult {
             id: "C2",
             status: Status::Unverified,
             findings: vec![],
-            note: Some("store has no encryption canary; encrypted-at-rest check cannot run".to_string()),
+            note: Some(
+                "store has no encryption canary; encrypted-at-rest check cannot run".to_string(),
+            ),
         };
     }
     let payloads = "
@@ -269,7 +289,11 @@ fn c2_encrypted_at_rest(conn: &Connection) -> CheckResult {
         .collect();
     CheckResult {
         id: "C2",
-        status: if total > 0 { Status::Fail } else { Status::Pass },
+        status: if total > 0 {
+            Status::Fail
+        } else {
+            Status::Pass
+        },
         findings,
         note: if total > 0 {
             Some(format!("{total} plaintext payload rows in encrypted store"))
@@ -358,7 +382,9 @@ fn c4_authority_expiry(conn: &Connection) -> CheckResult {
             id: "C4",
             status: Status::Unverified,
             findings: vec![],
-            note: Some("no authority manifests configured; presence/expiry cannot be asserted".to_string()),
+            note: Some(
+                "no authority manifests configured; presence/expiry cannot be asserted".to_string(),
+            ),
         };
     }
     let now = crate::db::now_ms() as i64;
@@ -383,7 +409,8 @@ fn c4_authority_expiry(conn: &Connection) -> CheckResult {
                 r.get::<_, String>(2)?,
             ))
         })
-        .and_then(|rows| rows.collect::<Result<Vec<_>, _>>()).unwrap_or_default();
+        .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
+        .unwrap_or_default();
     for row in rows {
         findings.push(format!("{}:{}/{}", row.0, row.1, row.2));
     }
@@ -424,9 +451,13 @@ fn c5_archived_not_served(conn: &Connection) -> CheckResult {
                 r.get::<_, String>(2)?,
             ))
         })
-        .and_then(|rows| rows.collect::<Result<Vec<_>, _>>()).unwrap_or_default();
+        .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
+        .unwrap_or_default();
     for row in rows {
-        findings.push(format!("{}:{}/{} (archived but still indexed)", row.0, row.1, row.2));
+        findings.push(format!(
+            "{}:{}/{} (archived but still indexed)",
+            row.0, row.1, row.2
+        ));
     }
     // 2) behavioral: recall probe for up to 10 archived tokens.
     if findings.is_empty() && !store_is_encrypted(conn) {
@@ -445,7 +476,8 @@ fn c5_archived_not_served(conn: &Connection) -> CheckResult {
                     r.get::<_, String>(3)?,
                 ))
             })
-            .and_then(|rows| rows.collect::<Result<Vec<_>, _>>()).unwrap_or_default();
+            .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
+            .unwrap_or_default();
         for (pid, pcat, pkey, pbody) in probes {
             let Some(token) = probe_token(&pbody) else {
                 continue;
@@ -456,7 +488,8 @@ fn c5_archived_not_served(conn: &Connection) -> CheckResult {
             let mut rstmt = conn.prepare(sql).unwrap_or_else(|_| panic!("C5 recall"));
             let served: Vec<String> = rstmt
                 .query_map([&q], |r| r.get::<_, String>(0))
-                .and_then(|rows| rows.collect::<Result<Vec<_>, _>>()).unwrap_or_default();
+                .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
+                .unwrap_or_default();
             if served.contains(&pid) {
                 findings.push(format!(
                     "{pid}:{pcat}/{pkey} (recall probe served an archived entity)"
@@ -467,7 +500,11 @@ fn c5_archived_not_served(conn: &Connection) -> CheckResult {
     }
     CheckResult {
         id: "C5",
-        status: if findings.is_empty() { Status::Pass } else { Status::Fail },
+        status: if findings.is_empty() {
+            Status::Pass
+        } else {
+            Status::Fail
+        },
         findings,
         note: if store_is_encrypted(conn) {
             Some("encrypted store: archived FTS structure checked; content probe requires the active key".to_string())
@@ -483,9 +520,9 @@ fn c5_archived_not_served(conn: &Connection) -> CheckResult {
 /// history indexes.
 fn protected_fts_value(value: &str) -> bool {
     !value.trim().is_empty()
-        && value.split_whitespace().all(|token| {
-            token.len() == 64 && token.bytes().all(|byte| byte.is_ascii_hexdigit())
-        })
+        && value
+            .split_whitespace()
+            .all(|token| token.len() == 64 && token.bytes().all(|byte| byte.is_ascii_hexdigit()))
 }
 
 fn protected_fts_invalid_rows(conn: &Connection, table: &str) -> Result<i64, rusqlite::Error> {
@@ -536,7 +573,10 @@ fn c6_fts_sync(conn: &Connection) -> CheckResult {
             Err(_) => return c6_failure("entities:fts-sync (missing-row enumeration unavailable)"),
         };
         for row in rows {
-            findings.push(format!("{}:{}/{} (entity missing from FTS index)", row.0, row.1, row.2));
+            findings.push(format!(
+                "{}:{}/{} (entity missing from FTS index)",
+                row.0, row.1, row.2
+            ));
         }
     }
     let history_missing: i64 = match conn.query_row(
@@ -580,7 +620,9 @@ fn c6_fts_sync(conn: &Connection) -> CheckResult {
         Err(_) => return c6_failure("entities:fts-sync (phantom-row check unavailable)"),
     };
     if phantom > 0 {
-        findings.push(format!("phantom-fts:{phantom} rows (index rows with no active entity)"));
+        findings.push(format!(
+            "phantom-fts:{phantom} rows (index rows with no active entity)"
+        ));
     }
     let encrypted = store_is_encrypted(conn);
     if encrypted {
@@ -596,7 +638,8 @@ fn c6_fts_sync(conn: &Connection) -> CheckResult {
             Err(_) => return c6_failure("encryption_profile:search_mode (check unavailable)"),
         };
         if mode.as_deref() != Some(crate::encryption::BLIND_TOKEN_SEARCH_MODE) {
-            findings.push("encryption_profile:search_mode (protected mode not declared)".to_string());
+            findings
+                .push("encryption_profile:search_mode (protected mode not declared)".to_string());
         }
         for table in ["entities_fts", "entity_history_fts"] {
             match protected_fts_invalid_rows(conn, table) {
@@ -715,7 +758,9 @@ fn c8_egress_sandbox() -> CheckResult {
         ProbeOutcome::Connected => CheckResult {
             id: "C8",
             status: Status::Fail,
-            findings: vec!["sandbox:egress (socket connect succeeded inside unshare -n)".to_string()],
+            findings: vec![
+                "sandbox:egress (socket connect succeeded inside unshare -n)".to_string(),
+            ],
             note: None,
         },
         ProbeOutcome::Blocked => CheckResult {
@@ -801,7 +846,8 @@ mod tests {
         if !ws.is_empty() {
             e.workspace_hash = ws.to_string();
         }
-        db.remember_with_options(&e, true, None, None, false).unwrap();
+        db.remember_with_options(&e, true, None, None, false)
+            .unwrap();
     }
 
     // ── C1 ──
@@ -809,19 +855,34 @@ mod tests {
     fn c1_fails_on_secret_shaped_body() {
         let conn = ro_db(|db| {
             seed_entity(db, "facts", "k1", r#"{"note":"release pipeline"}"#, "");
-            seed_entity(db, "facts", "k2", r#"{"note":"deploy token ghp_abcdefghijklmnopqrstuvwxyz1234567890 here"}"#, "");
+            seed_entity(
+                db,
+                "facts",
+                "k2",
+                r#"{"note":"deploy token ghp_abcdefghijklmnopqrstuvwxyz1234567890 here"}"#,
+                "",
+            );
         });
         let r = run_verify(&conn, &VerifyOptions::default());
         let c1 = r.iter().find(|c| c.id == "C1").unwrap();
         assert_eq!(c1.status, Status::Fail, "{c1:?}");
         assert!(c1.findings[0].starts_with("k2:facts/k2"), "{c1:?}");
-        assert!(!c1.findings[0].contains("ghp_"), "findings must not leak values: {c1:?}");
+        assert!(
+            !c1.findings[0].contains("ghp_"),
+            "findings must not leak values: {c1:?}"
+        );
     }
 
     #[test]
     fn c1_fails_on_missing_sanitizer_marker() {
         let conn = ro_db(|db| {
-            seed_entity(db, "facts", "k1", r#"{"api_token":"supersecretvalue123"}"#, "");
+            seed_entity(
+                db,
+                "facts",
+                "k1",
+                r#"{"api_token":"supersecretvalue123"}"#,
+                "",
+            );
         });
         let r = run_verify(&conn, &VerifyOptions::default());
         let c1 = r.iter().find(|c| c.id == "C1").unwrap();
@@ -875,7 +936,13 @@ mod tests {
     fn c2_passes_encrypted_store_without_plaintext() {
         let conn = ro_db(|db| {
             // Seed ciphertext-shaped values before marking the store encrypted.
-            seed_entity(db, "facts", "k1", "bm90anNvbnBsYWludGV4dHlwaWNhbGJhc2U2NA==", "");
+            seed_entity(
+                db,
+                "facts",
+                "k1",
+                "bm90anNvbnBsYWludGV4dHlwaWNhbGJhc2U2NA==",
+                "",
+            );
             db.conn()
                 .unwrap()
                 .execute(
@@ -925,11 +992,8 @@ mod tests {
         let conn = ro_db(|db| {
             seed_entity(db, "facts", "k-array", "[]", "");
             let c = db.conn().unwrap();
-            c.execute(
-                "UPDATE entities SET hints = '0' WHERE key = 'k-array'",
-                [],
-            )
-            .unwrap();
+            c.execute("UPDATE entities SET hints = '0' WHERE key = 'k-array'", [])
+                .unwrap();
             c.execute(
                 "INSERT INTO entity_history
                  (history_id, id, category, key, body_json, created_at_unix_ms, last_accessed_unix_ms)
@@ -976,7 +1040,9 @@ mod tests {
         let c6 = r.iter().find(|check| check.id == "C6").unwrap();
         assert_eq!(c6.status, Status::Fail, "{c6:?}");
         assert!(
-            c6.findings.iter().any(|finding| finding.contains("history")),
+            c6.findings
+                .iter()
+                .any(|finding| finding.contains("history")),
             "{c6:?}"
         );
     }
@@ -985,7 +1051,13 @@ mod tests {
     #[test]
     fn c3_fails_on_identity_collision() {
         let conn = ro_db(|db| {
-            seed_entity(db, "facts", "ka", r#"{"note":"zzzwsa distinctive payload"}"#, "ws-a");
+            seed_entity(
+                db,
+                "facts",
+                "ka",
+                r#"{"note":"zzzwsa distinctive payload"}"#,
+                "ws-a",
+            );
             // Corruption: the same (category, key) is stamped into a second
             // workspace (the #951 shadow-import hazard — a shadow write that
             // leaked into the live workspace under a colliding identity).
@@ -1026,8 +1098,20 @@ mod tests {
     #[test]
     fn c3_passes_isolated_workspaces() {
         let conn = ro_db(|db| {
-            seed_entity(db, "facts", "ka", r#"{"note":"zzzwsa distinctive payload"}"#, "ws-a");
-            seed_entity(db, "facts", "kb", r#"{"note":"zzzwsa distinctive payload"}"#, "ws-b");
+            seed_entity(
+                db,
+                "facts",
+                "ka",
+                r#"{"note":"zzzwsa distinctive payload"}"#,
+                "ws-a",
+            );
+            seed_entity(
+                db,
+                "facts",
+                "kb",
+                r#"{"note":"zzzwsa distinctive payload"}"#,
+                "ws-b",
+            );
         });
         let r = run_verify(&conn, &VerifyOptions::default());
         let c3 = r.iter().find(|c| c.id == "C3").unwrap();
@@ -1206,7 +1290,8 @@ mod tests {
                 rusqlite::params![crate::encryption::BLIND_TOKEN_SEARCH_MODE],
             )
             .unwrap();
-            c.execute("UPDATE entities_fts SET body_json = ''", []).unwrap();
+            c.execute("UPDATE entities_fts SET body_json = ''", [])
+                .unwrap();
         });
         let r = run_verify(&conn, &VerifyOptions::default());
         let c6 = r.iter().find(|c| c.id == "C6").unwrap();
@@ -1216,7 +1301,13 @@ mod tests {
     #[test]
     fn c6_fails_on_archived_live_fts_phantom() {
         let conn = ro_db(|db| {
-            seed_entity(db, "facts", "k-archived-phantom", r#"{"note":"indexed"}"#, "");
+            seed_entity(
+                db,
+                "facts",
+                "k-archived-phantom",
+                r#"{"note":"indexed"}"#,
+                "",
+            );
             let id = db
                 .get_entity("facts", "k-archived-phantom")
                 .unwrap()
@@ -1273,7 +1364,12 @@ mod tests {
     fn sandbox_actually_blocks_sockets() {
         // Prove the sandbox blocks sockets: a loopback listener reachable
         // unsandboxed must be unreachable inside `unshare -n`.
-        if std::process::Command::new("unshare").arg("-n").arg("true").status().is_err() {
+        if std::process::Command::new("unshare")
+            .arg("-n")
+            .arg("true")
+            .status()
+            .is_err()
+        {
             eprintln!("unshare unavailable; sandbox proof skipped");
             return;
         }
@@ -1293,7 +1389,12 @@ mod tests {
 
     #[test]
     fn c8_unverified_without_unshare() {
-        if std::process::Command::new("unshare").arg("-n").arg("true").status().is_ok() {
+        if std::process::Command::new("unshare")
+            .arg("-n")
+            .arg("true")
+            .status()
+            .is_ok()
+        {
             eprintln!("unshare present; UNVERIFIED path exercised only where absent");
             return;
         }
@@ -1316,10 +1417,16 @@ mod tests {
         let r = run_verify(&conn, &VerifyOptions::default());
         assert_eq!(exit_code(&r), 3, "violation must exit 3");
         let json = render_json(&r);
-        assert!(!json.contains("ghp_"), "JSON output must not leak values: {json}");
+        assert!(
+            !json.contains("ghp_"),
+            "JSON output must not leak values: {json}"
+        );
         let human = render_human(&r);
         assert!(human.contains("FAIL"), "{human}");
-        assert!(!human.contains("ghp_"), "human output must not leak values: {human}");
+        assert!(
+            !human.contains("ghp_"),
+            "human output must not leak values: {human}"
+        );
     }
 
     #[test]
@@ -1377,7 +1484,13 @@ mod tests {
         let conn = ro_db(|db| {
             seed_entity(db, "facts", "k1", r#"{"note":"clean notes"}"#, "");
         });
-        let r = run_verify(&conn, &VerifyOptions { strict: false, skip: vec!["C7".to_string()] });
+        let r = run_verify(
+            &conn,
+            &VerifyOptions {
+                strict: false,
+                skip: vec!["C7".to_string()],
+            },
+        );
         let c7 = r.iter().find(|c| c.id == "C7").unwrap();
         assert_eq!(c7.status, Status::Unverified, "{c7:?}");
         assert_eq!(exit_code(&r), 2, "skipped check must exit 2 (never PASS)");
@@ -1390,13 +1503,21 @@ mod tests {
         });
         run_verify(&conn, &VerifyOptions::default());
         // Read-only handle cannot write: an attempted write must fail.
-        assert!(conn.execute("CREATE TABLE should_not_exist (x)", []).is_err());
+        assert!(conn
+            .execute("CREATE TABLE should_not_exist (x)", [])
+            .is_err());
     }
 
     #[test]
     fn encrypted_store_c1_passes_and_c2_runs() {
         let conn = ro_db(|db| {
-            seed_entity(db, "facts", "k1", "bm90anNvbnBsYWludGV4dHlwaWNhbGJhc2U2NA==", "");
+            seed_entity(
+                db,
+                "facts",
+                "k1",
+                "bm90anNvbnBsYWludGV4dHlwaWNhbGJhc2U2NA==",
+                "",
+            );
             db.conn()
                 .unwrap()
                 .execute(
@@ -1414,7 +1535,11 @@ mod tests {
         });
         let r = run_verify(&conn, &VerifyOptions::default());
         let c1 = r.iter().find(|c| c.id == "C1").unwrap();
-        assert_eq!(c1.status, Status::Pass, "C1 holds by construction on ciphertext: {c1:?}");
+        assert_eq!(
+            c1.status,
+            Status::Pass,
+            "C1 holds by construction on ciphertext: {c1:?}"
+        );
         let c2 = r.iter().find(|c| c.id == "C2").unwrap();
         assert_eq!(c2.status, Status::Pass, "{c2:?}");
     }

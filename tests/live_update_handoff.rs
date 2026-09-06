@@ -188,11 +188,17 @@ fn initialize(s: &mut Server) {
             "clientInfo": {"name": "live-update-e2e-agent", "version": "1"}
         }),
     );
-    assert!(init["result"].is_object(), "initialize must succeed: {init}");
+    assert!(
+        init["result"].is_object(),
+        "initialize must succeed: {init}"
+    );
 }
 
 fn call_tool(s: &mut Server, name: &str, args: serde_json::Value) -> serde_json::Value {
-    let resp = s.call("tools/call", serde_json::json!({"name": name, "arguments": args}));
+    let resp = s.call(
+        "tools/call",
+        serde_json::json!({"name": name, "arguments": args}),
+    );
     assert!(
         resp["error"].is_null() && resp["result"].is_object(),
         "tools/call {name} must return a result, got: {resp}"
@@ -214,13 +220,24 @@ fn explicit_handoff_resumes_session_on_same_stdio() {
     initialize(&mut s);
 
     // Nominal: not stale, health works.
-    assert!(!health_binary_stale(&mut s), "fresh server must not be stale");
+    assert!(
+        !health_binary_stale(&mut s),
+        "fresh server must not be stale"
+    );
 
     // Rebuild mid-session → fail loud on every tool except handoff/health.
     s.replace_binary();
-    let recall = call_tool(&mut s, "perseus_vault_recall", serde_json::json!({"query": "anything"}));
+    let recall = call_tool(
+        &mut s,
+        "perseus_vault_recall",
+        serde_json::json!({"query": "anything"}),
+    );
     let sc = &recall["result"]["structuredContent"];
-    assert_eq!(sc["isError"], serde_json::json!(true), "stale call must fail loud: {recall}");
+    assert_eq!(
+        sc["isError"],
+        serde_json::json!(true),
+        "stale call must fail loud: {recall}"
+    );
     assert!(
         sc["content"][0]["text"]
             .as_str()
@@ -228,7 +245,10 @@ fn explicit_handoff_resumes_session_on_same_stdio() {
             .contains("replaced on disk"),
         "stale refusal must explain the staleness: {recall}"
     );
-    assert!(health_binary_stale(&mut s), "health must report binary_stale after rebuild");
+    assert!(
+        health_binary_stale(&mut s),
+        "health must report binary_stale after rebuild"
+    );
 
     // Explicit hot-swap, exactly as the #858 workflow documents.
     let handoff = call_tool(
@@ -283,21 +303,36 @@ fn auto_handoff_answers_inflight_call_from_new_image() {
     // Prime the staleness identity while the binary is current: the identity
     // is captured at first use, and a real client evaluates it on every call
     // from session start (so this mirrors the production sequence).
-    assert!(!health_binary_stale(&mut s), "fresh server must not be stale");
+    assert!(
+        !health_binary_stale(&mut s),
+        "fresh server must not be stale"
+    );
 
     // Rebuild mid-session: with auto-handoff the SAME tools/call is answered
     // by the replacement image — one clean response, no isError, no reconnect
     // tool invocation.
     s.replace_binary();
-    let recall = call_tool(&mut s, "perseus_vault_recall", serde_json::json!({"query": "anything"}));
+    let recall = call_tool(
+        &mut s,
+        "perseus_vault_recall",
+        serde_json::json!({"query": "anything"}),
+    );
     let sc = &recall["result"]["structuredContent"];
     assert!(
-        sc.get("isError").map(|v| v != &serde_json::json!(true)).unwrap_or(true),
+        sc.get("isError")
+            .map(|v| v != &serde_json::json!(true))
+            .unwrap_or(true),
         "auto-handoff must not surface an isError: {recall}"
     );
     let text = recall["result"]["content"][0]["text"].as_str().unwrap();
-    assert!(!text.contains("replaced on disk"), "stale refusal must not appear: {recall}");
-    assert!(!text.contains("Not initialized"), "-32002 must not appear: {recall}");
+    assert!(
+        !text.contains("replaced on disk"),
+        "stale refusal must not appear: {recall}"
+    );
+    assert!(
+        !text.contains("Not initialized"),
+        "-32002 must not appear: {recall}"
+    );
 
     // The session continues on the new image.
     assert!(
@@ -305,5 +340,8 @@ fn auto_handoff_answers_inflight_call_from_new_image() {
         "post-auto-handoff health must come from the new image"
     );
     let list = s.call("tools/list", serde_json::json!({}));
-    assert!(list["result"]["tools"].is_array(), "tools/list must work: {list}");
+    assert!(
+        list["result"]["tools"].is_array(),
+        "tools/list must work: {list}"
+    );
 }

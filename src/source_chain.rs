@@ -172,7 +172,9 @@ impl SourceChainIdentity {
             }
         } else {
             if !is_sha256(&self.commitment_sha256) {
-                return Err("source-chain commitment must be a lowercase SHA-256 digest".to_string());
+                return Err(
+                    "source-chain commitment must be a lowercase SHA-256 digest".to_string()
+                );
             }
             if self.commitment_sha256 != _sc_identity_commitment(self) {
                 return Err("source-chain commitment does not match identity".to_string());
@@ -213,8 +215,7 @@ impl SourceChainIdentity {
     /// missing. A chain-sensitive route must either select one known key or
     /// report that identity is unavailable.
     pub fn compatible_with(&self, other: &Self) -> bool {
-        self.compatibility_key().is_some()
-            && self.compatibility_key() == other.compatibility_key()
+        self.compatibility_key().is_some() && self.compatibility_key() == other.compatibility_key()
     }
 
     fn _has_anchor(&self) -> bool {
@@ -343,8 +344,19 @@ fn _sc_identity_commitment(identity: &SourceChainIdentity) -> String {
 pub fn is_chain_sensitive_query(query: &str) -> bool {
     let lower = query.to_ascii_lowercase();
     [
-        "chain", "lineage", "episode", "experience", "thread", "sequence", "chronolog",
-        "before", "after", "then", "path", "multi-hop", "multihop",
+        "chain",
+        "lineage",
+        "episode",
+        "experience",
+        "thread",
+        "sequence",
+        "chronolog",
+        "before",
+        "after",
+        "then",
+        "path",
+        "multi-hop",
+        "multihop",
     ]
     .iter()
     .any(|marker| lower.contains(marker))
@@ -360,11 +372,10 @@ fn _sc_commitment(value: &Value) -> String {
 
 fn _sc_validate_id(label: &str, value: &str) -> Result<(), String> {
     let count = value.chars().count();
-    if value.trim().is_empty()
-        || count > _SC_MAX_ID_CHARS
-        || value.chars().any(char::is_control)
-    {
-        return Err(format!("source-chain {label} is empty, oversized, or contains control text"));
+    if value.trim().is_empty() || count > _SC_MAX_ID_CHARS || value.chars().any(char::is_control) {
+        return Err(format!(
+            "source-chain {label} is empty, oversized, or contains control text"
+        ));
     }
     Ok(())
 }

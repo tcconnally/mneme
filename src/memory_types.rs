@@ -295,7 +295,10 @@ mod tests {
         p.query = "plain legacy fact".to_string();
         let hits = db.recall(&p).unwrap();
         assert_eq!(hits[0].memory_type, "");
-        assert_eq!(policy_for(&hits[0].memory_type).memory_type, MemoryType::Semantic);
+        assert_eq!(
+            policy_for(&hits[0].memory_type).memory_type,
+            MemoryType::Semantic
+        );
     }
 
     #[test]
@@ -340,29 +343,49 @@ mod tests {
         .unwrap();
         db.decay_tick().unwrap();
         let cscore: f64 = conn
-            .query_row("SELECT decay_score FROM entities WHERE id=?1", rusqlite::params![cid], |r| r.get(0))
+            .query_row(
+                "SELECT decay_score FROM entities WHERE id=?1",
+                rusqlite::params![cid],
+                |r| r.get(0),
+            )
             .unwrap();
         let escore: f64 = conn
-            .query_row("SELECT decay_score FROM entities WHERE id=?1", rusqlite::params![eid], |r| r.get(0))
+            .query_row(
+                "SELECT decay_score FROM entities WHERE id=?1",
+                rusqlite::params![eid],
+                |r| r.get(0),
+            )
             .unwrap();
         // decay_score DECREASES toward forgetting (0 = dead). The constraint
         // (4x half-life) must retain more score than the episode (0.5x).
-        assert!(cscore > escore, "constraint {cscore} should outlive episodic {escore}");
+        assert!(
+            cscore > escore,
+            "constraint {cscore} should outlive episodic {escore}"
+        );
     }
 
     #[test]
     fn type_filter_narrows_fused_recall_and_validates() {
         let db = TestDatabase::new("memtype-filter");
         db.remember(&test_entity(
-            "rules", "c1", "{\"text\":\"never store tokens\"}", "constraint",
+            "rules",
+            "c1",
+            "{\"text\":\"never store tokens\"}",
+            "constraint",
         ))
         .unwrap();
         db.remember(&test_entity(
-            "sessions", "e1", "{\"text\":\"monday sync about tokens\"}", "episodic",
+            "sessions",
+            "e1",
+            "{\"text\":\"monday sync about tokens\"}",
+            "episodic",
         ))
         .unwrap();
         db.remember(&test_entity(
-            "facts", "l1", "{\"text\":\"legacy tokens note\"}", "",
+            "facts",
+            "l1",
+            "{\"text\":\"legacy tokens note\"}",
+            "",
         ))
         .unwrap();
 

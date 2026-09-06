@@ -297,12 +297,10 @@ mod tests {
         write_fixture(&db, &seg_entity("c4", "gamma topic four", 4_000, ws)).unwrap();
         write_fixture(&db, &seg_entity("c5", "gamma topic five", 5_000, ws)).unwrap();
         // Direct candidate-scoped consolidate over the first three only.
-        let params: crate::models::ConsolidateParams = serde_json::from_value(
-            serde_json::json!({
-                "category": "turns",
-                "workspace_hash": ws,
-            }),
-        )
+        let params: crate::models::ConsolidateParams = serde_json::from_value(serde_json::json!({
+            "category": "turns",
+            "workspace_hash": ws,
+        }))
         .unwrap();
         let report = db
             .consolidate_with_candidates(&params, Some(&["c1".into(), "c2".into(), "c3".into()]))
@@ -311,12 +309,10 @@ mod tests {
         assert_eq!(report.source_entities_merged, 3);
         // c4/c5 untouched by this scoped pass: still live, no observation
         // covers them yet — a follow-up scoped run over them merges them.
-        let params2: crate::models::ConsolidateParams = serde_json::from_value(
-            serde_json::json!({
-                "category": "turns",
-                "workspace_hash": ws,
-            }),
-        )
+        let params2: crate::models::ConsolidateParams = serde_json::from_value(serde_json::json!({
+            "category": "turns",
+            "workspace_hash": ws,
+        }))
         .unwrap();
         let report2 = db
             .consolidate_with_candidates(&params2, Some(&["c4".into(), "c5".into()]))

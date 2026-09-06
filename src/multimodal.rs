@@ -17,8 +17,8 @@ use std::path::Path;
 
 /// Extensions read directly as UTF-8 text — no feature, no dependency.
 const PLAINTEXT_EXTS: &[&str] = &[
-    "txt", "md", "markdown", "rst", "csv", "tsv", "json", "jsonl", "yaml", "yml",
-    "toml", "log", "xml", "htm", "html", "tex", "org",
+    "txt", "md", "markdown", "rst", "csv", "tsv", "json", "jsonl", "yaml", "yml", "toml", "log",
+    "xml", "htm", "html", "tex", "org",
 ];
 
 /// Default cap on the on-disk size of a file ingested via `perseus_vault_ingest_file`,
@@ -129,10 +129,9 @@ fn extract_docx_limited(
 ) -> Result<String, String> {
     use std::io::Read;
     enforce_ingest_size(path, max_bytes)?;
-    let file =
-        std::fs::File::open(path).map_err(|e| format!("open {}: {}", path.display(), e))?;
-    let mut zip =
-        zip::ZipArchive::new(file).map_err(|e| format!("{} is not a valid .docx (zip): {e}", path.display()))?;
+    let file = std::fs::File::open(path).map_err(|e| format!("open {}: {}", path.display(), e))?;
+    let mut zip = zip::ZipArchive::new(file)
+        .map_err(|e| format!("{} is not a valid .docx (zip): {e}", path.display()))?;
     let mut xml = String::new();
     {
         let doc = zip
@@ -208,7 +207,11 @@ pub fn docx_xml_to_text(xml: &str) -> String {
             // line breaks) has no whitespace before the `/`, so split on
             // whitespace alone would yield "w:tab/" and never match "w:tab"
             // below — strip a trailing '/' too.
-            let elem = name.split_whitespace().next().unwrap_or("").trim_end_matches('/');
+            let elem = name
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .trim_end_matches('/');
             if elem == "w:t" {
                 capture = !tag.starts_with('/');
             } else if tag.starts_with('/') && elem == "w:p" {
@@ -283,7 +286,9 @@ mod tests {
 
     #[test]
     fn no_extension_errors() {
-        assert!(extract_text(Path::new("/x/README")).unwrap_err().contains("no file extension"));
+        assert!(extract_text(Path::new("/x/README"))
+            .unwrap_err()
+            .contains("no file extension"));
     }
 
     #[test]
@@ -319,15 +324,20 @@ mod tests {
 
         // Self-closing WITH attributes already worked (whitespace precedes the
         // '/'); keep it covered so a future change can't regress it silently.
-        let xml = "<w:p><w:r><w:t>A</w:t><w:tab w:val=\"left\" w:pos=\"720\"/><w:t>B</w:t></w:r></w:p>";
+        let xml =
+            "<w:p><w:r><w:t>A</w:t><w:tab w:val=\"left\" w:pos=\"720\"/><w:t>B</w:t></w:r></w:p>";
         assert_eq!(docx_xml_to_text(xml), "A\tB");
     }
 
     #[cfg(not(feature = "multimodal"))]
     #[test]
     fn docx_pdf_error_without_feature() {
-        assert!(extract_text(Path::new("/x/a.docx")).unwrap_err().contains("--features multimodal"));
-        assert!(extract_text(Path::new("/x/a.pdf")).unwrap_err().contains("--features multimodal"));
+        assert!(extract_text(Path::new("/x/a.docx"))
+            .unwrap_err()
+            .contains("--features multimodal"));
+        assert!(extract_text(Path::new("/x/a.pdf"))
+            .unwrap_err()
+            .contains("--features multimodal"));
     }
 
     #[cfg(feature = "multimodal")]
@@ -339,7 +349,8 @@ mod tests {
         {
             let file = std::fs::File::create(&p).unwrap();
             let mut zw = zip::ZipWriter::new(file);
-            zw.start_file("word/document.xml", SimpleFileOptions::default()).unwrap();
+            zw.start_file("word/document.xml", SimpleFileOptions::default())
+                .unwrap();
             zw.write_all(
                 b"<w:document><w:body><w:p><w:r><w:t>Hello from docx</w:t></w:r></w:p></w:body></w:document>",
             )
@@ -356,7 +367,10 @@ mod tests {
     fn docx_decompression_bomb_is_rejected() {
         use zip::write::SimpleFileOptions;
         let dir = std::env::temp_dir();
-        let p = dir.join(format!("perseus_vault-mm-bomb-{}.docx", uuid::Uuid::new_v4()));
+        let p = dir.join(format!(
+            "perseus_vault-mm-bomb-{}.docx",
+            uuid::Uuid::new_v4()
+        ));
         {
             let file = std::fs::File::create(&p).unwrap();
             let mut zw = zip::ZipWriter::new(file);
@@ -376,11 +390,17 @@ mod tests {
         // entry decompresses past a 64 KiB decompressed cap -> rejected as a bomb.
         let err = extract_docx_limited(&p, 50 * 1024 * 1024, 64 * 1024).unwrap_err();
         assert!(err.contains("decompresses beyond"), "got: {err}");
-        assert!(err.contains("PERSEUS_VAULT_MAX_DECOMPRESSED_BYTES"), "got: {err}");
+        assert!(
+            err.contains("PERSEUS_VAULT_MAX_DECOMPRESSED_BYTES"),
+            "got: {err}"
+        );
 
         // A decompressed cap above the entry size extracts without error.
         let ok = extract_docx_limited(&p, 50 * 1024 * 1024, 16 * 1024 * 1024);
-        assert!(ok.is_ok(), "generous decompressed cap should succeed: {ok:?}");
+        assert!(
+            ok.is_ok(),
+            "generous decompressed cap should succeed: {ok:?}"
+        );
 
         let _ = std::fs::remove_file(&p);
     }

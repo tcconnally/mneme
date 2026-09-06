@@ -9,7 +9,8 @@ use crate::db::{now_ms, Database};
 use crate::log_digest;
 use crate::models::{
     ArtifactRepresentation, AskParams, EmbedParams, Entity, ExternalRef, IngestParams,
-    JournalEvent, OriginRecord, PruneParams, RecallOutcome, RecallParams, RecallStatus, SearchMode, StateEntry, TimelineParams,
+    JournalEvent, OriginRecord, PruneParams, RecallOutcome, RecallParams, RecallStatus, SearchMode,
+    StateEntry, TimelineParams,
 };
 use crate::vector_quant::EmbeddingQuant;
 
@@ -731,12 +732,16 @@ fn retain_chain_coherent_temporal(
     if entities.len() != hits.len() {
         return Err("temporal provenance is not aligned with entities".to_string());
     }
-    let (selected, _excluded) = crate::evidence_lanes::select_chain_coherent_entities(entities.clone());
+    let (selected, _excluded) =
+        crate::evidence_lanes::select_chain_coherent_entities(entities.clone());
     let selected_ids: std::collections::HashSet<String> =
         selected.into_iter().map(|entity| entity.id).collect();
     let mut kept_entities = Vec::new();
     let mut kept_hits = Vec::new();
-    for (entity, hit) in std::mem::take(entities).into_iter().zip(std::mem::take(hits)) {
+    for (entity, hit) in std::mem::take(entities)
+        .into_iter()
+        .zip(std::mem::take(hits))
+    {
         if selected_ids.contains(&entity.id) {
             kept_entities.push(entity);
             kept_hits.push(hit);
@@ -754,12 +759,16 @@ fn retain_chain_coherent_serialized(
     if entities.len() != items.len() {
         return Err("serialized recall items are not aligned with entities".to_string());
     }
-    let (selected, _excluded) = crate::evidence_lanes::select_chain_coherent_entities(entities.clone());
+    let (selected, _excluded) =
+        crate::evidence_lanes::select_chain_coherent_entities(entities.clone());
     let selected_ids: std::collections::HashSet<String> =
         selected.into_iter().map(|entity| entity.id).collect();
     let mut kept_entities = Vec::new();
     let mut kept_items = Vec::new();
-    for (entity, item) in std::mem::take(entities).into_iter().zip(std::mem::take(items)) {
+    for (entity, item) in std::mem::take(entities)
+        .into_iter()
+        .zip(std::mem::take(items))
+    {
         if selected_ids.contains(&entity.id) {
             kept_entities.push(entity);
             kept_items.push(item);
@@ -2475,11 +2484,7 @@ fn recall_query_has_searchable_term(query: &str) -> bool {
         .any(|word| word.chars().any(char::is_alphanumeric))
 }
 
-fn resolve_search_mode(
-    db: &Database,
-    requested: &str,
-    query: &str,
-) -> Result<SearchMode, String> {
+fn resolve_search_mode(db: &Database, requested: &str, query: &str) -> Result<SearchMode, String> {
     let searchable = recall_query_has_searchable_term(query);
     match requested {
         "dense" if searchable => Ok(SearchMode::Dense),
@@ -2532,12 +2537,7 @@ fn aggregate_batch_answer_outcome(
         };
     }
     if has_degraded {
-        return crate::safe_outcome::object(
-            "degraded",
-            "stale",
-            "degraded",
-            delivered_items > 0,
-        );
+        return crate::safe_outcome::object("degraded", "stale", "degraded", delivered_items > 0);
     }
     if has_abstained || delivered_items == 0 {
         return crate::safe_outcome::object("abstained", "empty", "no_match", false);
@@ -2547,9 +2547,8 @@ fn aggregate_batch_answer_outcome(
 
 /// #1142: apply a declared graph manifest through the governed write boundary.
 pub fn handle_declared_graph_manifest(db: &Database, args: Value) -> Result<String, String> {
-    let request: crate::declared_graph::DeclaredGraphManifestRequest =
-        serde_json::from_value(args)
-            .map_err(|e| format!("Invalid declared graph manifest arguments: {e}"))?;
+    let request: crate::declared_graph::DeclaredGraphManifestRequest = serde_json::from_value(args)
+        .map_err(|e| format!("Invalid declared graph manifest arguments: {e}"))?;
     let capability = if request.operation == "delete" {
         "memory.commit"
     } else {
@@ -2681,7 +2680,10 @@ fn finalize_selection_projection(
     let mut removed_selected = 0usize;
 
     for candidate in &mut selection.candidates {
-        if let Some(entity) = entities.iter().find(|entity| entity.id == candidate.candidate_id) {
+        if let Some(entity) = entities
+            .iter()
+            .find(|entity| entity.id == candidate.candidate_id)
+        {
             candidate.source_chain_commitment = crate::db::source_chain_commitment(entity);
             candidate.source_chain_status = crate::db::source_chain_status(entity).to_string();
         }
@@ -2731,30 +2733,32 @@ fn finalize_selection_projection(
             return Err("selection decision candidate bound exceeded".to_string());
         }
         let token_estimate = selection_item_token_estimate(&items[index]);
-        selection.candidates.push(crate::selection_decisions::SelectionDecision {
-            candidate_id: id.clone(),
-            source_chain_commitment: entities
-                .iter()
-                .find(|entity| entity.id == *id)
-                .and_then(crate::db::source_chain_commitment),
-            source_chain_status: entities
-                .iter()
-                .find(|entity| entity.id == *id)
-                .map(crate::db::source_chain_status)
-                .unwrap_or("unknown")
-                .to_string(),
-            source_arm_ranks: std::collections::BTreeMap::from([(arm.to_string(), *arm_rank)]),
-            fused_rank: None,
-            fused_score: None,
-            rerank_score: None,
-            validity_multiplier: None,
-            token_estimate,
-            token_estimator: token_estimate.map(|_| "chars-div-4-v1".to_string()),
-            eligible: true,
-            selected: true,
-            final_rank: Some((index + 1) as u32),
-            disposition: "selected".to_string(),
-        });
+        selection
+            .candidates
+            .push(crate::selection_decisions::SelectionDecision {
+                candidate_id: id.clone(),
+                source_chain_commitment: entities
+                    .iter()
+                    .find(|entity| entity.id == *id)
+                    .and_then(crate::db::source_chain_commitment),
+                source_chain_status: entities
+                    .iter()
+                    .find(|entity| entity.id == *id)
+                    .map(crate::db::source_chain_status)
+                    .unwrap_or("unknown")
+                    .to_string(),
+                source_arm_ranks: std::collections::BTreeMap::from([(arm.to_string(), *arm_rank)]),
+                fused_rank: None,
+                fused_score: None,
+                rerank_score: None,
+                validity_multiplier: None,
+                token_estimate,
+                token_estimator: token_estimate.map(|_| "chars-div-4-v1".to_string()),
+                eligible: true,
+                selected: true,
+                final_rank: Some((index + 1) as u32),
+                disposition: "selected".to_string(),
+            });
         added_selected += 1;
     }
 
@@ -2762,15 +2766,19 @@ fn finalize_selection_projection(
         if let Some(existing) = selection.arms.iter_mut().find(|state| state.arm == arm) {
             existing.candidate_count = existing.candidate_count.saturating_add(count);
         } else {
-            selection.arms.push(crate::selection_decisions::SelectionArmState {
-                arm,
-                status: "ok".to_string(),
-                candidate_count: count,
-            });
+            selection
+                .arms
+                .push(crate::selection_decisions::SelectionArmState {
+                    arm,
+                    status: "ok".to_string(),
+                    candidate_count: count,
+                });
         }
     }
 
-    selection.candidates.sort_by(|left, right| left.candidate_id.cmp(&right.candidate_id));
+    selection
+        .candidates
+        .sort_by(|left, right| left.candidate_id.cmp(&right.candidate_id));
     selection.candidate_count = selection.candidates.len();
     selection.eligible_count = selection
         .candidates
@@ -2785,10 +2793,7 @@ fn finalize_selection_projection(
         .saturating_sub(removed_selected)
         .saturating_add(added_selected)
         .max(selection.delivered_count);
-    selection.estimated_tokens_used = items
-        .iter()
-        .filter_map(selection_item_token_estimate)
-        .sum();
+    selection.estimated_tokens_used = items.iter().filter_map(selection_item_token_estimate).sum();
     if selection.delivered_count == 0 && selection.eligible_count == 0 {
         selection.abstained = true;
         selection.abstention_reason = Some("no_eligible_candidates".to_string());
@@ -2885,8 +2890,7 @@ pub fn handle_recall(db: &Database, args: Value) -> Result<String, String> {
     // opt-in that produces no projection.
     if a.include_selection_decisions && mode != SearchMode::Fused {
         return Err(
-            "include_selection_decisions requires mode='fused' and a searchable query"
-                .to_string(),
+            "include_selection_decisions requires mode='fused' and a searchable query".to_string(),
         );
     }
 
@@ -2923,7 +2927,9 @@ pub fn handle_recall(db: &Database, args: Value) -> Result<String, String> {
     let requested_limit = a.limit;
     let requested_offset = a.offset.max(0);
     if requested_offset > 0 && mode_for_side_effects != SearchMode::Fts5 {
-        return Err("exact offset pagination is currently available only for FTS5 recalls".to_string());
+        return Err(
+            "exact offset pagination is currently available only for FTS5 recalls".to_string(),
+        );
     }
     let effective_limit = if startup_rank && a.offset == 0 {
         requested_limit
@@ -3051,7 +3057,8 @@ pub fn handle_recall(db: &Database, args: Value) -> Result<String, String> {
             let completeness = db
                 .recall_with_completeness(&params)
                 .map_err(|error| format!("Recall completeness failed: {error}"));
-            entities.and_then(|entities| completeness.map(|(_, completeness)| (entities, completeness)))
+            entities
+                .and_then(|entities| completeness.map(|(_, completeness)| (entities, completeness)))
         } else {
             db.recall_with_completeness(&params)
                 .map_err(|error| format!("Recall failed: {error}"))
@@ -3304,10 +3311,7 @@ pub fn handle_recall(db: &Database, args: Value) -> Result<String, String> {
     // #1048: confirmed query key — an identical repeat of a query that was
     // successfully repaired (report_success) serves its confirmed entities
     // first-pass, marked so the caller can see the provenance of the hit.
-    if !confirmed_query.is_empty()
-        && !temporal_filtering
-        && confirmed_query_bound
-    {
+    if !confirmed_query.is_empty() && !temporal_filtering && confirmed_query_bound {
         if let Ok(Some(confirmed)) = db.serve_confirmed_query_key(
             &confirmed_query,
             profile_workspace.as_deref(),
@@ -3317,13 +3321,16 @@ pub fn handle_recall(db: &Database, args: Value) -> Result<String, String> {
                 .iter()
                 .filter_map(|v| v.get("id").and_then(|x| x.as_str()).map(String::from))
                 .collect();
-            let expected_chain_key = if crate::source_chain::is_chain_sensitive_query(&confirmed_query) {
-                entities
-                    .first()
-                    .and_then(|entity| crate::evidence_lanes::entity_chain_key(entity).ok().flatten())
-            } else {
-                None
-            };
+            let expected_chain_key =
+                if crate::source_chain::is_chain_sensitive_query(&confirmed_query) {
+                    entities.first().and_then(|entity| {
+                        crate::evidence_lanes::entity_chain_key(entity)
+                            .ok()
+                            .flatten()
+                    })
+                } else {
+                    None
+                };
             let mut confirmed_entities = Vec::new();
             let mut prepend: Vec<serde_json::Value> = Vec::new();
             for e in confirmed {
@@ -3338,7 +3345,8 @@ pub fn handle_recall(db: &Database, args: Value) -> Result<String, String> {
                     profile_workspace.as_deref(),
                 ) {
                     if include_selection_decisions {
-                        selection_filter_reasons.insert(e.id.clone(), "filtered_policy".to_string());
+                        selection_filter_reasons
+                            .insert(e.id.clone(), "filtered_policy".to_string());
                     }
                     continue;
                 }
@@ -3347,13 +3355,15 @@ pub fn handle_recall(db: &Database, args: Value) -> Result<String, String> {
                         Ok(Some(actual)) if actual == expected => {}
                         Ok(Some(_)) => {
                             if include_selection_decisions {
-                                selection_filter_reasons.insert(e.id.clone(), "incompatible_chain".to_string());
+                                selection_filter_reasons
+                                    .insert(e.id.clone(), "incompatible_chain".to_string());
                             }
                             continue;
                         }
                         Ok(None) | Err(_) => {
                             if include_selection_decisions {
-                                selection_filter_reasons.insert(e.id.clone(), "unknown_chain_identity".to_string());
+                                selection_filter_reasons
+                                    .insert(e.id.clone(), "unknown_chain_identity".to_string());
                             }
                             continue;
                         }
@@ -4025,10 +4035,7 @@ pub fn handle_recall_batch(db: &Database, args: Value) -> Result<String, String>
         if let Some(object) = result.as_object_mut() {
             object.insert(
                 "answer_outcome".to_string(),
-                aggregate_batch_answer_outcome(
-                    &query_outcomes,
-                    items_expanded.len(),
-                ),
+                aggregate_batch_answer_outcome(&query_outcomes, items_expanded.len()),
             );
             object.insert("query_outcomes".to_string(), json!(query_outcomes));
         }
@@ -4342,7 +4349,9 @@ fn declared_graph_projection_value(
         .ok_or_else(|| "include_declared_graph requires a non-empty workspace_hash".to_string())?;
     let requesting_agent_id = requesting_agent_id
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| "include_declared_graph requires a transport-stamped requesting_agent_id".to_string())?;
+        .ok_or_else(|| {
+            "include_declared_graph requires a transport-stamped requesting_agent_id".to_string()
+        })?;
     let query = crate::declared_graph::DeclaredGraphQuery {
         workspace_hash: workspace_hash.to_string(),
         source_key: None,
@@ -4398,9 +4407,7 @@ fn profile_allows_entity(
     });
     match profile {
         "shared" => {
-            entity.category != "preference"
-                && entity.category != "personal"
-                && workspace_allowed
+            entity.category != "preference" && entity.category != "personal" && workspace_allowed
         }
         "personal" => entity.category == "preference" || entity.category == "personal",
         "agent" => matches!(
@@ -4440,26 +4447,26 @@ fn confirmed_entity_matches_request(
     {
         return false;
     }
-    if args
-        .topic_path
-        .as_deref()
-        .is_some_and(|topic_path| !topic_path.is_empty() && !entity.topic_path.starts_with(topic_path))
-    {
+    if args.topic_path.as_deref().is_some_and(|topic_path| {
+        !topic_path.is_empty() && !entity.topic_path.starts_with(topic_path)
+    }) {
         return false;
     }
-    if args.always_on.is_some_and(|always_on| entity.always_on != always_on) {
+    if args
+        .always_on
+        .is_some_and(|always_on| entity.always_on != always_on)
+    {
         return false;
     }
     if profile_workspace.is_some_and(|workspace| {
-            if workspace.is_empty() {
-                !entity.workspace_hash.is_empty()
-            } else if args.scope_weight.is_some() {
-                entity.workspace_hash != workspace && !entity.workspace_hash.is_empty()
-            } else {
-                entity.workspace_hash != workspace
-            }
-        })
-    {
+        if workspace.is_empty() {
+            !entity.workspace_hash.is_empty()
+        } else if args.scope_weight.is_some() {
+            entity.workspace_hash != workspace && !entity.workspace_hash.is_empty()
+        } else {
+            entity.workspace_hash != workspace
+        }
+    }) {
         return false;
     }
     if args
@@ -4494,7 +4501,6 @@ fn confirmed_entity_matches_request(
     }
     true
 }
-
 
 pub fn handle_scan(db: &Database, args: Value) -> Result<String, String> {
     let a: ScanArgs = serde_json::from_value(args.clone())
@@ -4670,8 +4676,7 @@ fn handle_recall_with_expansion(
     // variants can legitimately select different chains and reintroduce the
     // incompatible rows at this merge boundary.
     if crate::source_chain::is_chain_sensitive_query(&a.query) {
-        let (coherent, _excluded) =
-            crate::evidence_lanes::select_chain_coherent_scored(merged);
+        let (coherent, _excluded) = crate::evidence_lanes::select_chain_coherent_scored(merged);
         merged = coherent;
     }
 
@@ -4746,12 +4751,7 @@ fn handle_recall_with_expansion(
     let mut recall = db.recall_outcome(&SearchMode::Fts5, true, response_total, None);
     if variant_backend_failed {
         if response_total == 0 {
-            recall = db.recall_outcome(
-                &SearchMode::Fts5,
-                true,
-                0,
-                Some("backend_unavailable"),
-            );
+            recall = db.recall_outcome(&SearchMode::Fts5, true, 0, Some("backend_unavailable"));
         } else {
             recall.status = RecallStatus::Partial;
             recall.reason = "partial_backend_failure".to_string();
@@ -7847,7 +7847,9 @@ fn intention_list(db: &Database, _a: &IntentionArgs) -> Result<String, String> {
         .prepare("SELECT * FROM entities WHERE category = 'intention' AND archived = 0")
         .map_err(|e| e.to_string())?;
     let rows = stmt
-        .query_map([], |row| crate::db::entity_from_row(row, db.encryption.as_ref()))
+        .query_map([], |row| {
+            crate::db::entity_from_row(row, db.encryption.as_ref())
+        })
         .map_err(|e| e.to_string())?;
     let mut by_name: std::collections::BTreeMap<String, (i64, serde_json::Value)> =
         std::collections::BTreeMap::new();
@@ -7912,7 +7914,7 @@ pub fn handle_context(db: &Database, args: Value) -> String {
                     false,
                 )
             })
-            .to_string()
+            .to_string();
         }
     };
 
@@ -7936,7 +7938,7 @@ pub fn handle_context(db: &Database, args: Value) -> String {
                     false,
                 )
             })
-            .to_string()
+            .to_string();
         }
     };
 
@@ -7959,19 +7961,20 @@ pub fn handle_context(db: &Database, args: Value) -> String {
         include_provider_source: a.include_provider_source,
     };
 
-    let block_result = match (evidence_requirements.as_ref(), a.include_selection_decisions) {
-        (Some(requirements), true) => db
-            .context_block_with_selection_decisions_and_sufficiency(&opts, requirements),
+    let block_result = match (
+        evidence_requirements.as_ref(),
+        a.include_selection_decisions,
+    ) {
+        (Some(requirements), true) => {
+            db.context_block_with_selection_decisions_and_sufficiency(&opts, requirements)
+        }
         (Some(requirements), false) => db.context_block_with_sufficiency(&opts, requirements),
         (None, true) => db.context_block_with_selection_decisions(&opts),
         (None, false) => db.context_block(&opts),
     };
     match block_result {
         Ok(block) => {
-            let selection_projection = block
-                .selection_decisions
-                .as_ref()
-                .map(serde_json::to_value);
+            let selection_projection = block.selection_decisions.as_ref().map(serde_json::to_value);
             let total_chars = block.markdown.chars().count();
             let mut output = json!({
                 "markdown": block.markdown,
@@ -8006,11 +8009,13 @@ pub fn handle_context(db: &Database, args: Value) -> String {
                 || a.include_selection_decisions
                 || context_answer_outcome.status != "complete"
             {
-                output["outcome"] = serde_json::to_value(context_answer_outcome)
-                    .unwrap_or_else(|_| json!({
-                        "status": "unavailable",
-                        "reason": "outcome_serialization_failed"
-                    }));
+                output["outcome"] =
+                    serde_json::to_value(context_answer_outcome).unwrap_or_else(|_| {
+                        json!({
+                            "status": "unavailable",
+                            "reason": "outcome_serialization_failed"
+                        })
+                    });
                 output["truncated"] = json!(block.truncated);
             }
             if let Some(serialized) = selection_projection {
@@ -8173,17 +8178,17 @@ pub fn handle_project_task(db: &Database, args: Value) -> Result<String, String>
         let mut output = serde_json::to_value(&report)
             .map_err(|e| format!("Projection serialization failed: {e}"))?;
         let counts = &report.contract.counts;
-        let hits = counts.live.saturating_add(counts.durable).saturating_add(counts.derived);
+        let hits = counts
+            .live
+            .saturating_add(counts.durable)
+            .saturating_add(counts.derived);
         // The legacy projection stays byte-compatible for a healthy result.
         // A true no-match is the exception: returning no outcome would make an
         // empty projection look like a successful answer.
         if hits == 0 {
-            output["outcome"] = serde_json::to_value(crate::safe_outcome::for_context(
-                Some(&req.query),
-                0,
-                false,
-            ))
-            .map_err(|e| format!("Projection outcome serialization failed: {e}"))?;
+            output["outcome"] =
+                serde_json::to_value(crate::safe_outcome::for_context(Some(&req.query), 0, false))
+                    .map_err(|e| format!("Projection outcome serialization failed: {e}"))?;
         }
         return serde_json::to_string(&output)
             .map_err(|e| format!("Projection serialization failed: {e}"));
@@ -8205,11 +8210,9 @@ pub fn handle_project_task(db: &Database, args: Value) -> Result<String, String>
             .map_err(|e| format!("Task outcome serialization failed: {e}"));
         }
     };
-    if let Err(error) = task_state.validate_for_project_task(
-        &req.query,
-        req.workspace_hash.as_deref(),
-        requester,
-    ) {
+    if let Err(error) =
+        task_state.validate_for_project_task(&req.query, req.workspace_hash.as_deref(), requester)
+    {
         if task_state_validation_is_governance_failure(&error) {
             let answer = crate::safe_outcome::for_task_failure(&error);
             return serde_json::to_string(&json!({
@@ -8336,20 +8339,13 @@ pub fn handle_experience_projection(db: &Database, args: Value) -> Result<String
             "experience_projection requires an initialized MCP session with clientInfo.name"
                 .to_string()
         })?;
-    let report = crate::experience_projection::read(
-        db,
-        &a.experience_id,
-        &a.workspace_hash,
-        principal_id,
-    )?;
+    let report =
+        crate::experience_projection::read(db, &a.experience_id, &a.workspace_hash, principal_id)?;
     serde_json::to_string(&report)
         .map_err(|e| format!("Experience projection serialization failed: {e}"))
 }
 
-pub fn handle_experience_projection_rebuild(
-    db: &Database,
-    args: Value,
-) -> Result<String, String> {
+pub fn handle_experience_projection_rebuild(db: &Database, args: Value) -> Result<String, String> {
     let a: ExperienceProjectionRebuildArgs = serde_json::from_value(args)
         .map_err(|e| format!("Invalid experience_projection_rebuild arguments: {e}"))?;
     let principal_id = a
@@ -9293,12 +9289,8 @@ pub fn handle_typed_traversal(db: &Database, args: Value) -> Result<String, Stri
         false,
     )
     .map_err(|e| e.to_string())?;
-    db.require_memory_capability(
-        &a.requesting_agent_id,
-        &a.workspace_hash,
-        "memory.read",
-    )
-    .map_err(|e| e.to_string())?;
+    db.require_memory_capability(&a.requesting_agent_id, &a.workspace_hash, "memory.read")
+        .map_err(|e| e.to_string())?;
     let t = db
         .typed_traversal_scoped(
             &a.query,
@@ -10880,8 +10872,7 @@ pub fn handle_action_intent(db: &Database, args: Value) -> Result<String, String
         )
     }
     .map_err(|e| format!("action_intent failed: {e}"))?;
-    serde_json::to_string(&action)
-    .map_err(|e| e.to_string())
+    serde_json::to_string(&action).map_err(|e| e.to_string())
 }
 #[derive(Debug, Deserialize)]
 pub struct ActionApproveArgs {
@@ -13675,10 +13666,7 @@ pub fn handle_workspace_quarantine(db: &Database, args: Value) -> Result<String,
 }
 
 pub fn handle_workspace_status(db: &Database, args: Value) -> Result<String, String> {
-    let caller_scoped = args
-        .get("status_scope")
-        .and_then(Value::as_str)
-        == Some("caller");
+    let caller_scoped = args.get("status_scope").and_then(Value::as_str) == Some("caller");
     let bindings = if caller_scoped {
         let profile = args
             .get("requesting_agent_id")
@@ -14377,10 +14365,9 @@ pub fn handle_recall_when(db: &Database, args: Value) -> Result<String, String> 
             },
             ..RecallOutcome::default()
         };
-        result["answer_outcome"] = serde_json::to_value(
-            crate::safe_outcome::for_recall(&recall, entities.len()),
-        )
-        .map_err(|_| "recall_when outcome serialization failed".to_string())?;
+        result["answer_outcome"] =
+            serde_json::to_value(crate::safe_outcome::for_recall(&recall, entities.len()))
+                .map_err(|_| "recall_when outcome serialization failed".to_string())?;
     }
     Ok(result.to_string())
 }
@@ -16188,7 +16175,7 @@ mod tests {
             refine_existing: true,
         };
         let report = db.consolidate(&params).expect("consolidate");
-                if !(report.lint_skips >= 1) {
+        if !(report.lint_skips >= 1) {
             panic!("test assertion failed");
         };
         // Nothing with the poisoned content was written.
@@ -17226,17 +17213,32 @@ mod tests {
         )
         .unwrap();
         let selection = &projected["fused_trace"]["selection_decisions"];
-        assert_eq!(selection["schema_version"], "perseus-vault-selection-decisions/v1");
+        assert_eq!(
+            selection["schema_version"],
+            "perseus-vault-selection-decisions/v1"
+        );
         assert_eq!(selection["candidate_count"], 1);
         assert_eq!(selection["eligible_count"], 1);
         assert_eq!(selection["delivered_count"], 1);
         assert_eq!(selection["candidates"][0]["disposition"], "selected");
         assert_eq!(selection["candidates"][0]["source_arm_ranks"]["fts5"], 1);
-        assert_eq!(selection["candidates"][0]["source_arm_ranks"]["temporal"], 1);
-        assert_eq!(selection["candidates"][0]["token_estimator"], "chars-div-4-v1");
+        assert_eq!(
+            selection["candidates"][0]["source_arm_ranks"]["temporal"],
+            1
+        );
+        assert_eq!(
+            selection["candidates"][0]["token_estimator"],
+            "chars-div-4-v1"
+        );
         assert_eq!(selection["arms"][0]["status"], "ok");
         assert_eq!(selection["arms"][1]["status"], "ok");
-        assert_eq!(selection["replay_fingerprint_sha256"].as_str().unwrap().len(), 64);
+        assert_eq!(
+            selection["replay_fingerprint_sha256"]
+                .as_str()
+                .unwrap()
+                .len(),
+            64
+        );
         let selection_text = selection.to_string();
         assert!(!selection_text.contains("selection audit"));
         assert!(!selection_text.contains("candidate text"));
@@ -17278,9 +17280,17 @@ mod tests {
         let filtered_selection = &filtered["fused_trace"]["selection_decisions"];
         assert_eq!(filtered["total"], 0);
         assert_eq!(filtered_selection["delivered_count"], 0);
-        assert_eq!(filtered_selection["abstention_reason"], "no_eligible_candidates");
-        assert_eq!(filtered_selection["candidates"][0]["disposition"], "filtered_policy");
-        assert!(!filtered_selection["candidates"][0]["selected"].as_bool().unwrap());
+        assert_eq!(
+            filtered_selection["abstention_reason"],
+            "no_eligible_candidates"
+        );
+        assert_eq!(
+            filtered_selection["candidates"][0]["disposition"],
+            "filtered_policy"
+        );
+        assert!(!filtered_selection["candidates"][0]["selected"]
+            .as_bool()
+            .unwrap());
 
         let err = handle_recall(
             &db,
@@ -17329,11 +17339,12 @@ mod tests {
         )
         .unwrap();
         let budget_selection = &budget["fused_trace"]["selection_decisions"];
-        assert!(budget_selection["candidates"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|candidate| candidate["disposition"] == "dropped_budget"),
+        assert!(
+            budget_selection["candidates"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|candidate| candidate["disposition"] == "dropped_budget"),
             "{budget_selection}"
         );
         assert_eq!(
@@ -17636,7 +17647,10 @@ mod tests {
         )
         .expect("legacy recall must return a response");
         let value: Value = serde_json::from_str(&raw).expect("legacy recall JSON");
-        assert!(value.get("answer_outcome").is_none(), "new outcome leaked: {raw}");
+        assert!(
+            value.get("answer_outcome").is_none(),
+            "new outcome leaked: {raw}"
+        );
         let _ = std::fs::remove_file(&path);
     }
 
@@ -19738,9 +19752,8 @@ mod tests {
                 }
             }
         }
-        let _interference_restore = InterferenceEnvRestore(
-            std::env::var("PERSEUS_VAULT_INTERFERENCE_MODE").ok(),
-        );
+        let _interference_restore =
+            InterferenceEnvRestore(std::env::var("PERSEUS_VAULT_INTERFERENCE_MODE").ok());
         std::env::set_var("PERSEUS_VAULT_INTERFERENCE_MODE", "off");
         let make = |id: &str, retrieval_count: i64| {
             let mut entity = crate::db::tests::make_entity(
@@ -19767,7 +19780,10 @@ mod tests {
         let a = make("a-expansion", 0);
         db.remember_skip_dedup(&z).unwrap();
         db.remember_skip_dedup(&a).unwrap();
-        assert!(db.get_entity("transcript", "a-expansion").unwrap().is_some());
+        assert!(db
+            .get_entity("transcript", "a-expansion")
+            .unwrap()
+            .is_some());
         let mut probe = RecallParams::default();
         probe.query = "lineage".to_string();
         probe.mode = SearchMode::Fts5;
@@ -22922,7 +22938,10 @@ mod tests {
             "dropped_budget"
         );
         assert_eq!(budgeted["selection_decisions"]["delivered_count"], 0);
-        assert_eq!(budgeted["selection_decisions"]["abstention_reason"], "budget_exhausted");
+        assert_eq!(
+            budgeted["selection_decisions"]["abstention_reason"],
+            "budget_exhausted"
+        );
 
         let _ = std::fs::remove_file(&path);
     }
@@ -22984,12 +23003,18 @@ mod tests {
         assert_eq!(value["sufficiency"]["latest"]["missing"], 1, "{out}");
         assert_eq!(value["sufficiency"]["temporal"]["missing"], 2, "{out}");
         assert_eq!(value["sufficiency"]["source_groups"]["missing"], 1, "{out}");
-        assert!(value["sufficiency"]["reason_codes"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|reason| reason == "dropped_coverage"), "{out}");
-        assert!(value["sufficiency"]["receipt"]["digest"].is_string(), "{out}");
+        assert!(
+            value["sufficiency"]["reason_codes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|reason| reason == "dropped_coverage"),
+            "{out}"
+        );
+        assert!(
+            value["sufficiency"]["receipt"]["digest"].is_string(),
+            "{out}"
+        );
         assert!(!out.contains("deployment bridge"), "{out}");
         assert!(!out.contains("bridge-a"), "{out}");
         let _ = std::fs::remove_file(&path);
@@ -23032,7 +23057,10 @@ mod tests {
         assert_eq!(value["sufficiency"]["counts"]["selected"], 2, "{out}");
         assert_eq!(value["sufficiency"]["counts"]["red_herring"], 1, "{out}");
         assert_eq!(value["sufficiency"]["latest"]["selected"], 1, "{out}");
-        assert_eq!(value["sufficiency"]["source_groups"]["selected"], 1, "{out}");
+        assert_eq!(
+            value["sufficiency"]["source_groups"]["selected"], 1,
+            "{out}"
+        );
         assert_eq!(value["entities_injected"], 3, "{out}");
         let _ = std::fs::remove_file(&path);
     }
@@ -23082,7 +23110,10 @@ mod tests {
         assert_eq!(value["sufficiency"]["counts"]["stale"], 1, "{out}");
         assert_eq!(value["sufficiency"]["counts"]["selected"], 1, "{out}");
         assert_eq!(value["sufficiency"]["latest"]["selected"], 1, "{out}");
-        assert_eq!(value["sufficiency"]["source_groups"]["selected"], 1, "{out}");
+        assert_eq!(
+            value["sufficiency"]["source_groups"]["selected"], 1,
+            "{out}"
+        );
         assert_eq!(value["entities_injected"], 0, "{out}");
         assert!(!out.contains("old superseded evidence"), "{out}");
         let _ = std::fs::remove_file(&path);
@@ -23160,7 +23191,10 @@ mod tests {
         assert_eq!(value["sufficiency"]["counts"]["unavailable"], 2, "{out}");
         assert_eq!(value["entities_injected"], 0, "{out}");
         assert!(!out.contains("private evidence must not leak"), "{out}");
-        assert!(!out.contains("other workspace evidence must not leak"), "{out}");
+        assert!(
+            !out.contains("other workspace evidence must not leak"),
+            "{out}"
+        );
         let preload_count: i64 = db
             .conn()
             .unwrap()
@@ -23170,7 +23204,10 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(preload_count, 0, "hidden rows must not create preload telemetry: {out}");
+        assert_eq!(
+            preload_count, 0,
+            "hidden rows must not create preload telemetry: {out}"
+        );
         let _ = std::fs::remove_file(&path);
     }
 
@@ -23205,7 +23242,10 @@ mod tests {
         );
         let value: Value = serde_json::from_str(&out).unwrap();
         assert_eq!(value["sufficiency"]["outcome"], "partial", "{out}");
-        assert_eq!(value["sufficiency"]["fallback"]["mode"], "canonical_retrieval", "{out}");
+        assert_eq!(
+            value["sufficiency"]["fallback"]["mode"], "canonical_retrieval",
+            "{out}"
+        );
         assert_eq!(value["entities_injected"], 0, "{out}");
         assert!(!out.contains("fallback available evidence"), "{out}");
         let _ = std::fs::remove_file(&path);
@@ -24211,9 +24251,24 @@ mod tests {
         let (db, path) = temp_db();
         let now = crate::db::now_ms();
         for (key, content, valid_from, valid_to) in [
-            ("valid-a", "valid expansion pagination alpha", now - 1_000, now + 10_000),
-            ("valid-b", "valid expansion pagination bravo", now - 900, now + 10_000),
-            ("expired", "valid expansion pagination expired", now - 10_000, now - 5_000),
+            (
+                "valid-a",
+                "valid expansion pagination alpha",
+                now - 1_000,
+                now + 10_000,
+            ),
+            (
+                "valid-b",
+                "valid expansion pagination bravo",
+                now - 900,
+                now + 10_000,
+            ),
+            (
+                "expired",
+                "valid expansion pagination expired",
+                now - 10_000,
+                now - 5_000,
+            ),
         ] {
             handle_remember(
                 &db,
@@ -24240,7 +24295,11 @@ mod tests {
         )
         .expect("valid-time expansion recall");
         let response: Value = serde_json::from_str(&raw).unwrap();
-        assert_eq!(response["total"], json!(2), "total must exclude expired matches: {raw}");
+        assert_eq!(
+            response["total"],
+            json!(2),
+            "total must exclude expired matches: {raw}"
+        );
         assert_eq!(response["items"].as_array().unwrap().len(), 1);
         let _ = std::fs::remove_file(path);
     }
@@ -24275,7 +24334,11 @@ mod tests {
         )
         .expect("expanded offset recall");
         let response: Value = serde_json::from_str(&raw).unwrap();
-        assert_eq!(response["total"], json!(3), "expansion total must be global: {raw}");
+        assert_eq!(
+            response["total"],
+            json!(3),
+            "expansion total must be global: {raw}"
+        );
         assert_eq!(response["items"].as_array().unwrap().len(), 1);
         let _ = std::fs::remove_file(path);
     }
@@ -24304,7 +24367,11 @@ mod tests {
         )
         .expect("offset recall");
         let response: Value = serde_json::from_str(&raw).unwrap();
-        assert_eq!(response["total"], json!(3), "total must describe the global visible set: {raw}");
+        assert_eq!(
+            response["total"],
+            json!(3),
+            "total must describe the global visible set: {raw}"
+        );
         assert_eq!(response["items"].as_array().unwrap().len(), 1);
         let _ = std::fs::remove_file(path);
     }
@@ -24356,7 +24423,11 @@ mod tests {
         probe.mode = SearchMode::Fts5;
         probe.skip_side_effects = true;
         let base = db.recall_unpaged_for_pagination(&probe).unwrap();
-        assert_eq!(base.len(), 2, "the fixture must provide two base hits: {base:?}");
+        assert_eq!(
+            base.len(),
+            2,
+            "the fixture must provide two base hits: {base:?}"
+        );
         assert!(!base.iter().any(|entity| entity.id == confirmed_id));
         assert!(
             db.serve_confirmed_query_key("side effect pagination", None, None)
@@ -24376,7 +24447,11 @@ mod tests {
         )
         .expect("offset recall with confirmed prepend");
         let response: Value = serde_json::from_str(&raw).unwrap();
-        assert_eq!(response["total"], json!(3), "confirmed prepend must affect total: {raw}");
+        assert_eq!(
+            response["total"],
+            json!(3),
+            "confirmed prepend must affect total: {raw}"
+        );
         let returned_id = response["items"][0]["id"].as_str().unwrap();
         let returned = db.get_entity_by_id_public(returned_id).unwrap().unwrap();
         assert_eq!(
@@ -24414,10 +24489,12 @@ mod tests {
             }),
         )
         .expect("private confirmation recall");
-        assert!(serde_json::from_str::<Value>(&private_raw).unwrap()["items"]
-            .as_array()
-            .unwrap()
-            .is_empty());
+        assert!(
+            serde_json::from_str::<Value>(&private_raw).unwrap()["items"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
 
         let mut personal = crate::db::tests::make_entity(
             "confirmed-personal",
@@ -24440,10 +24517,12 @@ mod tests {
             }),
         )
         .expect("profile-filtered confirmation recall");
-        assert!(serde_json::from_str::<Value>(&profile_raw).unwrap()["items"]
-            .as_array()
-            .unwrap()
-            .is_empty());
+        assert!(
+            serde_json::from_str::<Value>(&profile_raw).unwrap()["items"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
 
         let mut other_workspace = crate::db::tests::make_entity(
             "confirmed-other-workspace",
@@ -24453,8 +24532,11 @@ mod tests {
         );
         other_workspace.workspace_hash = "ws-b".to_string();
         db.remember(&other_workspace).unwrap();
-        db.report_success("workspace confirmation marker", &[other_workspace.id.clone()])
-            .unwrap();
+        db.report_success(
+            "workspace confirmation marker",
+            &[other_workspace.id.clone()],
+        )
+        .unwrap();
         let workspace_raw = handle_recall(
             &db,
             json!({
@@ -24465,10 +24547,12 @@ mod tests {
             }),
         )
         .expect("workspace-filtered confirmation recall");
-        assert!(serde_json::from_str::<Value>(&workspace_raw).unwrap()["items"]
-            .as_array()
-            .unwrap()
-            .is_empty());
+        assert!(
+            serde_json::from_str::<Value>(&workspace_raw).unwrap()["items"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
 
         let mut ref_filtered = crate::db::tests::make_entity(
             "confirmed-ref",
@@ -24518,9 +24602,7 @@ mod tests {
         let query = "side effect pagination";
         db.report_success(query, &[confirmed_id.clone()]).unwrap();
 
-        for (key, content) in [
-            ("base-a", "side effect pagination alpha"),
-        ] {
+        for (key, content) in [("base-a", "side effect pagination alpha")] {
             handle_remember(
                 &db,
                 json!({
@@ -24538,21 +24620,28 @@ mod tests {
         probe.mode = SearchMode::Fts5;
         probe.skip_side_effects = true;
         let base = db.recall_unpaged_for_pagination(&probe).unwrap();
-        assert_eq!(base.len(), 1, "the fixture must provide one base hit: {base:?}");
+        assert_eq!(
+            base.len(),
+            1,
+            "the fixture must provide one base hit: {base:?}"
+        );
         let base_ids: Vec<String> = base.iter().map(|entity| entity.id.clone()).collect();
         assert!(!base_ids.iter().any(|id| id == &confirmed_id));
         assert!(
-            db.serve_confirmed_query_key(query, None, None).unwrap().is_some(),
+            db.serve_confirmed_query_key(query, None, None)
+                .unwrap()
+                .is_some(),
             "confirmed query binding must survive page population"
         );
 
-        let raw = handle_recall(
-            &db,
-            json!({"query": query, "mode": "fts5", "limit": 1}),
-        )
-        .expect("first-page recall with confirmed prepend");
+        let raw = handle_recall(&db, json!({"query": query, "mode": "fts5", "limit": 1}))
+            .expect("first-page recall with confirmed prepend");
         let response: Value = serde_json::from_str(&raw).unwrap();
-        assert_eq!(response["total"], json!(2), "confirmed prepend must affect total: {raw}");
+        assert_eq!(
+            response["total"],
+            json!(2),
+            "confirmed prepend must affect total: {raw}"
+        );
         assert_eq!(response["items"].as_array().unwrap().len(), 1);
         assert_eq!(response["items"][0]["id"], json!(confirmed_id));
         assert_eq!(
@@ -24565,7 +24654,10 @@ mod tests {
         );
         for id in base_ids {
             assert_eq!(
-                db.get_entity_by_id_public(&id).unwrap().unwrap().retrieval_count,
+                db.get_entity_by_id_public(&id)
+                    .unwrap()
+                    .unwrap()
+                    .retrieval_count,
                 0,
                 "a base entity pushed past the first page must not receive the side effect"
             );
@@ -24592,7 +24684,11 @@ mod tests {
             .id;
         let query = "confirmed total pagination";
         db.report_success(query, &[confirmed_id.clone()]).unwrap();
-        for (key, suffix) in [("base-a", "alpha"), ("base-b", "bravo"), ("base-c", "charlie")] {
+        for (key, suffix) in [
+            ("base-a", "alpha"),
+            ("base-b", "bravo"),
+            ("base-c", "charlie"),
+        ] {
             handle_remember(
                 &db,
                 json!({
@@ -24611,7 +24707,11 @@ mod tests {
             )
             .expect("confirmed total recall");
             let response: Value = serde_json::from_str(&raw).unwrap();
-            assert_eq!(response["total"], json!(4), "total must include all base hits: {raw}");
+            assert_eq!(
+                response["total"],
+                json!(4),
+                "total must include all base hits: {raw}"
+            );
             assert_eq!(response["items"].as_array().unwrap().len(), 1);
             if offset == 0 {
                 assert_eq!(
@@ -24794,11 +24894,8 @@ mod tests {
     #[test]
     fn empty_recall_batch_honors_requested_answer_outcome() {
         let (db, _path) = temp_tool_db();
-        let raw = handle_recall_batch(
-            &db,
-            json!({"queries": [], "include_outcome": true}),
-        )
-        .expect("empty batch should return a bounded response");
+        let raw = handle_recall_batch(&db, json!({"queries": [], "include_outcome": true}))
+            .expect("empty batch should return a bounded response");
         let value: Value = serde_json::from_str(&raw).expect("empty batch JSON");
         assert_eq!(value["items"], json!([]), "{raw}");
         assert_eq!(value["total"], 0, "{raw}");
@@ -24835,17 +24932,27 @@ mod tests {
         )
         .expect("one failed batch arm must be bounded");
         let value: Value = serde_json::from_str(&raw).expect("batch JSON");
-        assert!(value["items"].as_array().unwrap().iter().any(|item| {
-            item["key"] == "batch-healthy-hit"
-        }), "healthy batch arm was lost: {raw}");
+        assert!(
+            value["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| { item["key"] == "batch-healthy-hit" }),
+            "healthy batch arm was lost: {raw}"
+        );
         assert_ne!(value["answer_outcome"]["status"], "complete", "{raw}");
         assert!(
-            value["query_outcomes"].as_array().unwrap().iter().any(|outcome| {
-                outcome["status"] == "unavailable"
-            }),
+            value["query_outcomes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|outcome| { outcome["status"] == "unavailable" }),
             "per-query backend failure was not represented: {raw}"
         );
-        assert!(!raw.contains("embedding backend"), "raw backend error leaked: {raw}");
+        assert!(
+            !raw.contains("embedding backend"),
+            "raw backend error leaked: {raw}"
+        );
     }
 
     #[test]
@@ -24856,7 +24963,10 @@ mod tests {
             json!({"query":"mode contract", "mode":"not-a-search-mode"}),
         )
         .expect_err("unknown search modes must fail closed");
-        assert!(error.contains("invalid search mode"), "unexpected error: {error}");
+        assert!(
+            error.contains("invalid search mode"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]
@@ -24886,17 +24996,17 @@ mod tests {
         assert_eq!(value["items"], json!([]), "{raw}");
         assert_eq!(value["answer_outcome"]["status"], "unavailable", "{raw}");
         assert_eq!(value["answer_outcome"]["answerable"], false, "{raw}");
-        assert!(!raw.contains("backend failure"), "query/error leaked: {raw}");
+        assert!(
+            !raw.contains("backend failure"),
+            "query/error leaked: {raw}"
+        );
     }
 
     #[test]
     fn semantic_search_rejects_non_searchable_query() {
         let (db, _path) = temp_tool_db();
-        let error = handle_semantic_search(
-            &db,
-            json!({"query":"***", "include_outcome":true}),
-        )
-        .expect_err("semantic search must not reinterpret punctuation as neighbors");
+        let error = handle_semantic_search(&db, json!({"query":"***", "include_outcome":true}))
+            .expect_err("semantic search must not reinterpret punctuation as neighbors");
         assert!(error.contains("searchable"), "unexpected error: {error}");
     }
 
@@ -24907,11 +25017,8 @@ mod tests {
             .unwrap()
             .execute_batch("DROP TABLE entities_fts")
             .unwrap();
-        let error = handle_recall_when(
-            &db,
-            json!({"context": "bounded trigger failure"}),
-        )
-        .expect_err("recall_when must fail when its trigger index is unavailable");
+        let error = handle_recall_when(&db, json!({"context": "bounded trigger failure"}))
+            .expect_err("recall_when must fail when its trigger index is unavailable");
         assert_eq!(error, "recall_when unavailable");
     }
 
@@ -24927,7 +25034,12 @@ mod tests {
         assert_eq!(value["items"], json!([]), "{raw}");
         assert_eq!(value["answer_outcome"]["status"], "abstained", "{raw}");
         assert_eq!(value["answer_outcome"]["answerable"], false, "{raw}");
-        assert!(!value["answer_outcome"].to_string().contains("no matching trigger"), "context leaked into outcome: {raw}");
+        assert!(
+            !value["answer_outcome"]
+                .to_string()
+                .contains("no matching trigger"),
+            "context leaked into outcome: {raw}"
+        );
     }
 
     #[test]
@@ -28395,7 +28507,11 @@ mod tests {
         let raw = handle_project_task(&db, json!({"task_title": "backend boundary"}))
             .expect("backend failure must be represented safely");
         let value: Value = serde_json::from_str(&raw).expect("safe outcome JSON");
-        assert_eq!(value.as_object().map(|object| object.len()), Some(1), "{raw}");
+        assert_eq!(
+            value.as_object().map(|object| object.len()),
+            Some(1),
+            "{raw}"
+        );
         assert_eq!(value["outcome"]["status"], "unavailable", "{raw}");
         assert_eq!(value["outcome"]["answerable"], false, "{raw}");
     }
@@ -28451,8 +28567,14 @@ mod tests {
         assert_eq!(value["task_state"]["base_sequence"], 0);
         assert_eq!(value["task_state"]["scope"]["workspace_hash"], workspace);
         assert_eq!(value["task_state"]["outcome"], "complete");
-        assert_eq!(value["serving"]["canonical_sources"][0]["id"], "task-state-evidence-1");
-        assert_eq!(value["serving"]["recalled_evidence"][0]["entity_id"], "task-state-evidence-1");
+        assert_eq!(
+            value["serving"]["canonical_sources"][0]["id"],
+            "task-state-evidence-1"
+        );
+        assert_eq!(
+            value["serving"]["recalled_evidence"][0]["entity_id"],
+            "task-state-evidence-1"
+        );
         assert!(value["task_state"].get("raw_prompt").is_none());
         let _ = std::fs::remove_file(&path);
     }
@@ -28483,7 +28605,11 @@ mod tests {
         )
         .expect("missing transport requester must be represented safely");
         let value: Value = serde_json::from_str(&raw).expect("safe outcome JSON");
-        assert_eq!(value.as_object().map(|object| object.len()), Some(1), "{raw}");
+        assert_eq!(
+            value.as_object().map(|object| object.len()),
+            Some(1),
+            "{raw}"
+        );
         assert_eq!(value["outcome"]["status"], "abstained", "{raw}");
         assert_eq!(value["outcome"]["reason"], "invisible", "{raw}");
         assert_eq!(value["outcome"]["answerable"], false, "{raw}");
@@ -28531,9 +28657,18 @@ mod tests {
         let value: Value = serde_json::from_str(&raw).expect("safe task-state JSON");
         assert_eq!(value["outcome"]["status"], "abstained", "{raw}");
         assert_eq!(value["outcome"]["answerable"], false, "{raw}");
-        assert!(value.get("sections").is_none(), "report leaked on failure: {raw}");
-        assert!(value.get("serving").is_none(), "serving evidence leaked on failure: {raw}");
-        assert!(!raw.contains("private failure query"), "query leaked on failure: {raw}");
+        assert!(
+            value.get("sections").is_none(),
+            "report leaked on failure: {raw}"
+        );
+        assert!(
+            value.get("serving").is_none(),
+            "serving evidence leaked on failure: {raw}"
+        );
+        assert!(
+            !raw.contains("private failure query"),
+            "query leaked on failure: {raw}"
+        );
     }
 
     #[test]
@@ -28568,7 +28703,10 @@ mod tests {
             }),
         );
         let error = result.expect_err("unknown task routes must fail closed");
-        assert!(error.contains("unsupported task route"), "unexpected error: {error}");
+        assert!(
+            error.contains("unsupported task route"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]
@@ -28622,8 +28760,7 @@ mod tests {
         assert_eq!(value["sufficiency"]["outcome"], "partial", "{raw}");
         assert_eq!(value["outcome"]["status"], "partial", "{raw}");
         assert_eq!(
-            value["outcome"]["fallback"]["mode"],
-            "canonical_retrieval",
+            value["outcome"]["fallback"]["mode"], "canonical_retrieval",
             "{raw}"
         );
         assert_eq!(value["entities_injected"], 0, "{raw}");
@@ -28690,9 +28827,15 @@ mod tests {
         let value: Value = serde_json::from_str(&raw).expect("project_task response must be JSON");
         assert_eq!(value["outcome"]["status"], "abstained", "{raw}");
         assert_eq!(value["outcome"]["reason"], "superseded", "{raw}");
-        assert_eq!(value["outcome"]["fallback"]["mode"], "canonical_retrieval", "{raw}");
+        assert_eq!(
+            value["outcome"]["fallback"]["mode"], "canonical_retrieval",
+            "{raw}"
+        );
         assert!(value["serving"].get("recalled_evidence").is_none(), "{raw}");
-        assert!(!raw.contains("stale superseded deployment evidence"), "{raw}");
+        assert!(
+            !raw.contains("stale superseded deployment evidence"),
+            "{raw}"
+        );
     }
 
     #[test]
@@ -28712,11 +28855,18 @@ mod tests {
         )
         .expect("recall backend failure must be represented safely");
         let value: Value = serde_json::from_str(&raw).expect("safe outcome JSON");
-        assert_eq!(value["items"].as_array().map(|items| items.len()), Some(0), "{raw}");
+        assert_eq!(
+            value["items"].as_array().map(|items| items.len()),
+            Some(0),
+            "{raw}"
+        );
         assert_eq!(value["total"], 0, "{raw}");
         assert_eq!(value["answer_outcome"]["status"], "unavailable", "{raw}");
         assert_eq!(value["answer_outcome"]["answerable"], false, "{raw}");
-        assert!(!raw.contains("no such table"), "raw backend error leaked: {raw}");
+        assert!(
+            !raw.contains("no such table"),
+            "raw backend error leaked: {raw}"
+        );
     }
 
     #[test]
@@ -28742,14 +28892,23 @@ mod tests {
         )
         .expect("malformed evidence must be represented, not crash recall");
         let value: Value = serde_json::from_str(&raw).expect("recall response must be JSON");
-        assert!(value["evidence"]["items"].as_array().unwrap().is_empty(), "{raw}");
-        assert!(value["evidence"]["excluded"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|entry| entry["reason"] == "malformed_reference"), "{raw}");
+        assert!(
+            value["evidence"]["items"].as_array().unwrap().is_empty(),
+            "{raw}"
+        );
+        assert!(
+            value["evidence"]["excluded"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|entry| entry["reason"] == "malformed_reference"),
+            "{raw}"
+        );
         assert_eq!(value["answer_outcome"]["status"], "abstained", "{raw}");
-        assert_eq!(value["answer_outcome"]["reason"], "malformed_reference", "{raw}");
+        assert_eq!(
+            value["answer_outcome"]["reason"], "malformed_reference",
+            "{raw}"
+        );
         assert_eq!(value["items"][0]["untrusted"], true, "{raw}");
     }
 
@@ -28772,7 +28931,10 @@ mod tests {
             }),
         );
         let value: Value = serde_json::from_str(&raw).expect("context response must be JSON");
-        assert!(value.get("outcome").is_none(), "healthy legacy response changed: {raw}");
+        assert!(
+            value.get("outcome").is_none(),
+            "healthy legacy response changed: {raw}"
+        );
     }
 
     #[test]
@@ -28797,7 +28959,10 @@ mod tests {
         )
         .unwrap();
         let value: Value = serde_json::from_str(&raw).expect("project_task response must be JSON");
-        assert!(value.get("outcome").is_none(), "healthy legacy response changed: {raw}");
+        assert!(
+            value.get("outcome").is_none(),
+            "healthy legacy response changed: {raw}"
+        );
     }
 
     #[test]
@@ -28878,13 +29043,19 @@ mod tests {
         );
         let full: Value = serde_json::from_str(&full_raw).expect("full context JSON");
         let full_markdown = full["markdown"].as_str().expect("full markdown");
-        assert!(full_markdown.contains('é'), "unicode fixture was not rendered: {full_raw}");
+        assert!(
+            full_markdown.contains('é'),
+            "unicode fixture was not rendered: {full_raw}"
+        );
         assert_eq!(
             full["total_chars"].as_i64(),
             Some(full_markdown.chars().count() as i64),
             "total_chars must count Unicode scalar values, not UTF-8 bytes: {full_raw}"
         );
-        assert_eq!(full["truncated"], false, "exactly under budget is not truncated: {full_raw}");
+        assert_eq!(
+            full["truncated"], false,
+            "exactly under budget is not truncated: {full_raw}"
+        );
 
         let tight_raw = handle_context(
             &db,
@@ -28896,7 +29067,10 @@ mod tests {
             }),
         );
         let tight: Value = serde_json::from_str(&tight_raw).expect("tight context JSON");
-        assert_eq!(tight["truncated"], true, "tight context must expose truncation: {tight_raw}");
+        assert_eq!(
+            tight["truncated"], true,
+            "tight context must expose truncation: {tight_raw}"
+        );
         assert!(
             matches!(
                 tight["outcome"]["status"].as_str(),

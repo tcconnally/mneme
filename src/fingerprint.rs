@@ -152,7 +152,10 @@ mod tests {
         assert_eq!(a, b);
         // And stable across many repeated encodes (no hidden state).
         for _ in 0..20 {
-            assert_eq!(a, fingerprint_bytes("The build fails on Windows CI after the rustfmt update"));
+            assert_eq!(
+                a,
+                fingerprint_bytes("The build fails on Windows CI after the rustfmt update")
+            );
         }
     }
 
@@ -161,7 +164,11 @@ mod tests {
     fn storage_cost_is_exactly_10k_packed_bits() {
         assert_eq!(FINGERPRINT_DIM, 10_000);
         assert_eq!(FINGERPRINT_BYTES, 1_250);
-        for text in ["a", "hello world", "much longer body text with many tokens and symbols *&^%$#@"] {
+        for text in [
+            "a",
+            "hello world",
+            "much longer body text with many tokens and symbols *&^%$#@",
+        ] {
             assert_eq!(fingerprint_bytes(text).len(), FINGERPRINT_BYTES);
         }
     }
@@ -183,9 +190,18 @@ mod tests {
     #[test]
     fn unrelated_texts_sit_at_the_noise_floor() {
         let pairs = [
-            ("quantum chromodynamics renormalization", "the ssh agent socket path on unraid"),
-            ("perl one-liner for csv quoting", "biosketch other support attachment"),
-            ("zebra migrations in the serengeti", "rust borrow checker lifetime elision"),
+            (
+                "quantum chromodynamics renormalization",
+                "the ssh agent socket path on unraid",
+            ),
+            (
+                "perl one-liner for csv quoting",
+                "biosketch other support attachment",
+            ),
+            (
+                "zebra migrations in the serengeti",
+                "rust borrow checker lifetime elision",
+            ),
         ];
         for (x, y) in pairs {
             let sim = fingerprint_similarity(&fingerprint_bytes(x), &fingerprint_bytes(y));

@@ -77,10 +77,7 @@ pub fn mode_label(mode: &crate::models::SearchMode) -> &'static str {
 }
 
 fn new_id(prefix: &str) -> String {
-    format!(
-        "{prefix}-{}",
-        uuid::Uuid::new_v4().simple().to_string()
-    )
+    format!("{prefix}-{}", uuid::Uuid::new_v4().simple().to_string())
 }
 
 /// Prune one telemetry table: retention window first, then a hard row cap.
@@ -186,7 +183,12 @@ pub fn record_arm_audit(
             query_hash,
         ],
     )?;
-    prune(conn, "recall_arm_audits", AUDIT_RETENTION_MS, AUDIT_CAP_ROWS)?;
+    prune(
+        conn,
+        "recall_arm_audits",
+        AUDIT_RETENTION_MS,
+        AUDIT_CAP_ROWS,
+    )?;
     Ok(())
 }
 
@@ -217,7 +219,12 @@ pub fn record_displacement(
             query,
         ],
     )?;
-    prune(conn, "displacement_events", SERVED_RETENTION_MS, SERVED_CAP_ROWS)?;
+    prune(
+        conn,
+        "displacement_events",
+        SERVED_RETENTION_MS,
+        SERVED_CAP_ROWS,
+    )?;
     Ok(())
 }
 
@@ -276,7 +283,9 @@ pub fn retrieval_telemetry_report(
     db: &Database,
     args: &TelemetryArgs,
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    let conn = db.conn().map_err(|e| format!("telemetry conn failed: {e}"))?;
+    let conn = db
+        .conn()
+        .map_err(|e| format!("telemetry conn failed: {e}"))?;
     let window_secs = args.window_secs.unwrap_or(24 * 3600);
     let window = Window {
         since_ts: now_ms() - window_secs * 1000,
@@ -315,32 +324,42 @@ pub fn retrieval_telemetry_report(
         all.push(Box::new(since));
         let refs: Vec<&dyn rusqlite::types::ToSql> = all.iter().map(|p| p.as_ref()).collect();
         let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
-        let out: Vec<(String, String, String, String, bool, f64, String, String, i64, i64, String)> =
-            stmt
-                .query_map(refs.as_slice(), |r| {
-                    Ok((
-                        r.get::<_, String>(0)?,
-                        r.get::<_, String>(1)?,
-                        r.get::<_, String>(2)?,
-                        r.get::<_, String>(3)?,
-                        r.get::<_, bool>(4)?,
-                        r.get::<_, f64>(5)?,
-                        r.get::<_, String>(6)?,
-                        r.get::<_, String>(7)?,
-                        r.get::<_, i64>(8)?,
-                        r.get::<_, i64>(9)?,
-                        r.get::<_, String>(10)?,
-                    ))
-                })
-                .map_err(|e| e.to_string())?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| e.to_string())?;
+        let out: Vec<(
+            String,
+            String,
+            String,
+            String,
+            bool,
+            f64,
+            String,
+            String,
+            i64,
+            i64,
+            String,
+        )> = stmt
+            .query_map(refs.as_slice(), |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, bool>(4)?,
+                    r.get::<_, f64>(5)?,
+                    r.get::<_, String>(6)?,
+                    r.get::<_, String>(7)?,
+                    r.get::<_, i64>(8)?,
+                    r.get::<_, i64>(9)?,
+                    r.get::<_, String>(10)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
         out
     };
 
     let empty = rows.is_empty();
-    let batches: std::collections::BTreeSet<String> =
-        rows.iter().map(|r| r.10.clone()).collect();
+    let batches: std::collections::BTreeSet<String> = rows.iter().map(|r| r.10.clone()).collect();
     let batch_count = batches.len() as i64;
     let slots_total: i64 = rows.len() as i64;
     let tokens_total: i64 = rows.iter().map(|r| r.8).sum();
@@ -349,7 +368,9 @@ pub fn retrieval_telemetry_report(
     let mut per_entity: std::collections::HashMap<String, (i64, i64, String, bool, f64)> =
         std::collections::HashMap::new();
     for r in &rows {
-        let e = per_entity.entry(r.0.clone()).or_insert((0, 0, r.1.clone(), r.4, r.5));
+        let e = per_entity
+            .entry(r.0.clone())
+            .or_insert((0, 0, r.1.clone(), r.4, r.5));
         e.0 += 1;
         e.1 += r.8;
     }
@@ -486,8 +507,10 @@ pub fn retrieval_telemetry_report(
                 "SELECT COUNT(*) FROM entities WHERE id IN ({placeholders}) \
                  AND archived = 0 AND status IN ('active','draft')"
             );
-            let refs: Vec<&dyn rusqlite::types::ToSql> =
-                chunk.iter().map(|s| s as &dyn rusqlite::types::ToSql).collect();
+            let refs: Vec<&dyn rusqlite::types::ToSql> = chunk
+                .iter()
+                .map(|s| s as &dyn rusqlite::types::ToSql)
+                .collect();
             let live: i64 = conn.query_row(&sql, refs.as_slice(), |r| r.get(0))?;
             served_reentry += chunk.len() as i64 - live;
         }
@@ -499,10 +522,7 @@ pub fn retrieval_telemetry_report(
     for r in &rows {
         let low_trust = !r.4 || r.5 < 0.5;
         if low_trust {
-            fanout
-                .entry(r.0.clone())
-                .or_default()
-                .insert(r.7.clone());
+            fanout.entry(r.0.clone()).or_default().insert(r.7.clone());
         }
     }
     let fanout_report: Vec<serde_json::Value> = fanout
@@ -692,10 +712,7 @@ pub fn retrieval_telemetry_report(
         format!("{:x}", Sha256::digest(canonical.as_bytes()))
     };
     if let Some(art) = report.get_mut("artifact").and_then(|a| a.as_object_mut()) {
-        art.insert(
-            "content_hash".to_string(),
-            serde_json::json!(content_hash),
-        );
+        art.insert("content_hash".to_string(), serde_json::json!(content_hash));
     }
     Ok(report)
 }
@@ -961,18 +978,19 @@ fn graph_probe(
                 .map(|i| format!("?{i}"))
                 .collect::<Vec<_>>()
                 .join(",");
-            let sql = format!(
-                "SELECT id, links FROM entities WHERE id IN ({placeholders})"
-            );
-            let refs: Vec<&dyn rusqlite::types::ToSql> =
-                chunk.iter().map(|s| s as &dyn rusqlite::types::ToSql).collect();
+            let sql = format!("SELECT id, links FROM entities WHERE id IN ({placeholders})");
+            let refs: Vec<&dyn rusqlite::types::ToSql> = chunk
+                .iter()
+                .map(|s| s as &dyn rusqlite::types::ToSql)
+                .collect();
             let mut stmt = conn.prepare(&sql)?;
             let rows = stmt.query_map(refs.as_slice(), |r| {
                 Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
             })?;
             for row in rows {
                 let (id, links_json) = row?;
-                if let Ok(links) = serde_json::from_str::<Vec<crate::models::MemoryLink>>(&links_json)
+                if let Ok(links) =
+                    serde_json::from_str::<Vec<crate::models::MemoryLink>>(&links_json)
                 {
                     for l in links {
                         if !seed_set.contains(l.target_id.as_str())
@@ -998,9 +1016,7 @@ fn graph_probe(
             .map(|s| s as &dyn rusqlite::types::ToSql)
             .collect();
         let total: i64 = conn.query_row(
-            &format!(
-                "SELECT COUNT(*) FROM entities WHERE id IN ({placeholders}) AND archived = 0"
-            ),
+            &format!("SELECT COUNT(*) FROM entities WHERE id IN ({placeholders}) AND archived = 0"),
             refs.as_slice(),
             |r| r.get(0),
         )?;
@@ -1135,7 +1151,10 @@ mod tests {
         assert_eq!(rep["state"], "empty");
         assert_eq!(rep["zero_vs_empty"], "empty");
         assert_eq!(rep["denominator"]["recalls"], 0);
-        assert_eq!(rep["artifact"]["schema_version"], crate::schema::SCHEMA_VERSION);
+        assert_eq!(
+            rep["artifact"]["schema_version"],
+            crate::schema::SCHEMA_VERSION
+        );
         assert_eq!(rep["contamination"]["served_reentry"], 0);
         let _ = std::fs::remove_file(path);
     }
@@ -1144,13 +1163,33 @@ mod tests {
     fn report_records_served_and_measures_concentration_repeat_diversity() {
         let (db, path) = temp_db();
         let conn = db.conn().unwrap();
-        db.remember(&make_entity("s-1", "facts", "s-1", r#"{"note":"alpha core"}"#)).unwrap();
-        db.remember(&make_entity("s-2", "insight", "s-2", r#"{"note":"beta detail"}"#)).unwrap();
+        db.remember(&make_entity(
+            "s-1",
+            "facts",
+            "s-1",
+            r#"{"note":"alpha core"}"#,
+        ))
+        .unwrap();
+        db.remember(&make_entity(
+            "s-2",
+            "insight",
+            "s-2",
+            r#"{"note":"beta detail"}"#,
+        ))
+        .unwrap();
         // Serve the STORED entities (real ids) so the delivered-set
         // validation finds them as live, serveable rows.
         let e1 = db.get_entity("facts", "s-1").unwrap().unwrap();
         let e2 = db.get_entity("insight", "s-2").unwrap().unwrap();
-        record_served(&conn, "b1", "p", "lexical", "alpha", &[e1.clone(), e2.clone()]).unwrap();
+        record_served(
+            &conn,
+            "b1",
+            "p",
+            "lexical",
+            "alpha",
+            &[e1.clone(), e2.clone()],
+        )
+        .unwrap();
         record_served(&conn, "b2", "p", "lexical", "alpha", &[e1.clone()]).unwrap();
         record_served(&conn, "b3", "p", "hybrid", "beta", &[e2.clone()]).unwrap();
         record_arm_audit(&conn, "hybrid", "sparse", 2, 0, 2, "p", "", "abc").unwrap();
@@ -1160,11 +1199,19 @@ mod tests {
         assert_eq!(rep["denominator"]["recalls"], 3);
         assert_eq!(rep["denominator"]["slots"], 4);
         assert_eq!(rep["denominator"]["unique_entities"], 2);
-        assert_eq!(rep["repeated_serving"]["repeat_rate"].as_f64().unwrap(), 0.5);
+        assert_eq!(
+            rep["repeated_serving"]["repeat_rate"].as_f64().unwrap(),
+            0.5
+        );
         assert_eq!(rep["concentration"]["top_entity_id"], "s-1");
         assert_eq!(rep["diversity"]["unique_sources"].as_i64().unwrap(), 1);
         assert!(rep["diversity"]["simpson_index"].as_f64().unwrap() > 0.0);
-        assert!(rep["diversity"]["source_classes"]["facts"].as_i64().unwrap() >= 1);
+        assert!(
+            rep["diversity"]["source_classes"]["facts"]
+                .as_i64()
+                .unwrap()
+                >= 1
+        );
         assert_eq!(rep["retrieval_profile"]["modes"]["hybrid"], 1);
         // Arm audits surface.
         let audits = rep["contamination"]["arm_audits"].as_array().unwrap();
@@ -1198,8 +1245,13 @@ mod tests {
         let (db, path) = temp_db();
         let conn = db.conn().unwrap();
         // Two entities with the same content; one gets deprecated.
-        db.remember(&make_entity("c-ok", "facts", "c-ok", r#"{"note":"zeppelin core notes"}"#))
-            .unwrap();
+        db.remember(&make_entity(
+            "c-ok",
+            "facts",
+            "c-ok",
+            r#"{"note":"zeppelin core notes"}"#,
+        ))
+        .unwrap();
         db.remember(&make_entity(
             "c-dep",
             "facts",
@@ -1215,7 +1267,11 @@ mod tests {
         )
         .unwrap();
         let probe = contamination_probe(&conn, "zeppelin core", "lexical", None).unwrap();
-        assert_eq!(probe["arms"][0]["blocked_reentry"], 1, "probe dump: {}", probe);
+        assert_eq!(
+            probe["arms"][0]["blocked_reentry"], 1,
+            "probe dump: {}",
+            probe
+        );
         let arms = probe["arms"].as_array().unwrap();
         assert_eq!(arms[0]["arm"], "lexical");
         assert!(arms[0]["blocked_reentry"].as_i64().unwrap() >= 1);
@@ -1227,7 +1283,16 @@ mod tests {
     fn displacement_recording_and_report() {
         let (db, path) = temp_db();
         let conn = db.conn().unwrap();
-        record_displacement(&conn, "d-1", "diversity_halving", true, "lexical", "", "alpha").unwrap();
+        record_displacement(
+            &conn,
+            "d-1",
+            "diversity_halving",
+            true,
+            "lexical",
+            "",
+            "alpha",
+        )
+        .unwrap();
         record_displacement(&conn, "d-2", "cooldown", false, "lexical", "", "beta").unwrap();
         let rep = retrieval_telemetry_report(&db, &TelemetryArgs::default()).unwrap();
         assert_eq!(rep["displacement"]["count"], 2);

@@ -36,7 +36,10 @@ pub struct ScrubJayProfile {
 
 impl ScrubJayProfile {
     pub const fn new(perishability_days: i64, utility_horizon_days: i64) -> Self {
-        Self { perishability_days, utility_horizon_days }
+        Self {
+            perishability_days,
+            utility_horizon_days,
+        }
     }
 }
 
@@ -80,8 +83,14 @@ mod tests {
     #[test]
     fn profile_table_is_deterministic() {
         assert_eq!(profile_for("episodic"), ScrubJayProfile::new(14, 30));
-        assert_eq!(profile_for("constraint"), ScrubJayProfile::new(180, HORIZON_NEVER_DAYS));
-        assert_eq!(profile_for("preference"), ScrubJayProfile::new(180, HORIZON_NEVER_DAYS));
+        assert_eq!(
+            profile_for("constraint"),
+            ScrubJayProfile::new(180, HORIZON_NEVER_DAYS)
+        );
+        assert_eq!(
+            profile_for("preference"),
+            ScrubJayProfile::new(180, HORIZON_NEVER_DAYS)
+        );
         assert_eq!(profile_for("failure"), ScrubJayProfile::new(7, 21));
         // Legacy + unknown fall back to the semantic profile.
         assert_eq!(profile_for(""), profile_for("semantic"));
@@ -181,9 +190,36 @@ mod tests {
     #[test]
     fn horizon_gate_excludes_only_past_horizon_perishable_types() {
         let db = crate::db::TestDatabase::new("scrubjay-horizon");
-        write_fixture(&db, &e2e_entity("v-stale-episodic", "{\"content\": \"scrubjaytoken alpha\"}", "episodic", 40)).unwrap();
-        write_fixture(&db, &e2e_entity("v-fresh-episodic", "{\"content\": \"scrubjaytoken beta\"}", "episodic", 1)).unwrap();
-        write_fixture(&db, &e2e_entity("v-old-preference", "{\"content\": \"scrubjaytoken gamma\"}", "preference", 400)).unwrap();
+        write_fixture(
+            &db,
+            &e2e_entity(
+                "v-stale-episodic",
+                "{\"content\": \"scrubjaytoken alpha\"}",
+                "episodic",
+                40,
+            ),
+        )
+        .unwrap();
+        write_fixture(
+            &db,
+            &e2e_entity(
+                "v-fresh-episodic",
+                "{\"content\": \"scrubjaytoken beta\"}",
+                "episodic",
+                1,
+            ),
+        )
+        .unwrap();
+        write_fixture(
+            &db,
+            &e2e_entity(
+                "v-old-preference",
+                "{\"content\": \"scrubjaytoken gamma\"}",
+                "preference",
+                400,
+            ),
+        )
+        .unwrap();
         // enforce backdated created_at for the stale episodic (remember()
         // normalizes to now)
         let conn = db.conn().unwrap();

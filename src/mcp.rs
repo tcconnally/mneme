@@ -266,7 +266,12 @@ impl MCPState {
     pub fn new_with_profile(profile: ToolProfile) -> Self {
         let strict_scope = std::env::var("PERSEUS_VAULT_STRICT_SCOPE")
             .ok()
-            .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+            .map(|v| {
+                matches!(
+                    v.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
             .unwrap_or(false);
         Self::new_with_profile_and_strict_scope(profile, strict_scope)
     }
@@ -783,9 +788,8 @@ pub fn handle_request(
                     // too. Never let a caller provide a second principal/agent
                     // inside the nested projection request.
                     if tool_name == "perseus_vault_project_task" {
-                        if let Some(task_state) = obj
-                            .get_mut("task_state")
-                            .and_then(Value::as_object_mut)
+                        if let Some(task_state) =
+                            obj.get_mut("task_state").and_then(Value::as_object_mut)
                         {
                             if sid.trim().is_empty() {
                                 task_state.remove("principal_id");
@@ -804,8 +808,7 @@ pub fn handle_request(
             // stamping so callers cannot widen it to the all-bindings
             // administrator view. Normalize null/non-object arguments before
             // stamping so argument shape cannot bypass the boundary.
-            if tool_name == "perseus_vault_workspace_status"
-            {
+            if tool_name == "perseus_vault_workspace_status" {
                 if let Some(obj) = tool_args.as_object_mut() {
                     obj.insert("status_scope".to_string(), json!("caller"));
                     let has_workspace = obj
@@ -8901,7 +8904,10 @@ const TOOL_SCOPES: &[(&str, ToolScope)] = &[
     ("perseus_vault_purge", ToolScope::Admin),
     ("perseus_vault_project_task", ToolScope::Agent),
     ("perseus_vault_experience_projection", ToolScope::Agent),
-    ("perseus_vault_experience_projection_rebuild", ToolScope::Ops),
+    (
+        "perseus_vault_experience_projection_rebuild",
+        ToolScope::Ops,
+    ),
     ("perseus_vault_expand_source", ToolScope::Agent),
     ("perseus_vault_expire", ToolScope::Ops),
     ("perseus_vault_redact", ToolScope::Ops),
@@ -9550,9 +9556,7 @@ mod tests {
 
         assert_eq!(names, expected);
         assert_eq!(lean.len(), expected.len());
-        assert!(names
-            .iter()
-            .all(|name| advertised_names().contains(name)));
+        assert!(names.iter().all(|name| advertised_names().contains(name)));
         assert!(!names.contains("perseus_vault_status"));
     }
 
@@ -9580,8 +9584,14 @@ mod tests {
         assert_eq!(value["count"], json!(1), "got: {raw}");
         assert_eq!(value["bindings"][0]["profile_name"], json!("lean-agent"));
         assert_eq!(value["bindings"][0]["workspace_hash"], json!("workspace-a"));
-        assert!(!raw.contains("other-agent"), "cross-profile metadata leaked: {raw}");
-        assert!(!raw.contains("workspace-b"), "cross-workspace metadata leaked: {raw}");
+        assert!(
+            !raw.contains("other-agent"),
+            "cross-profile metadata leaked: {raw}"
+        );
+        assert!(
+            !raw.contains("workspace-b"),
+            "cross-workspace metadata leaked: {raw}"
+        );
 
         let _ = fs::remove_file(&db_path);
     }
@@ -9627,7 +9637,13 @@ mod tests {
         assert_eq!(output["type"], "object");
         assert_eq!(
             output["properties"]["outcome"]["enum"],
-            json!(["complete", "partial", "degraded", "abstained", "unavailable"])
+            json!([
+                "complete",
+                "partial",
+                "degraded",
+                "abstained",
+                "unavailable"
+            ])
         );
         assert_eq!(
             output["properties"]["receipt"]["properties"]["query_sha256"]["pattern"],
@@ -9677,20 +9693,33 @@ mod tests {
             let schema = &tool["outputSchema"]["properties"][field];
             assert_eq!(schema["type"], "object", "{name}.{field}");
             assert_eq!(
-                schema["properties"]["schema_version"]["const"],
-                "perseus-vault-answer-outcome/v1",
+                schema["properties"]["schema_version"]["const"], "perseus-vault-answer-outcome/v1",
                 "{name}.{field} schema version"
             );
-            assert_eq!(schema["properties"]["status"]["enum"], expected_statuses, "{name}.{field}");
             assert_eq!(
-                schema["properties"]["recall_status"]["enum"],
-                expected_recall_statuses,
+                schema["properties"]["status"]["enum"], expected_statuses,
+                "{name}.{field}"
+            );
+            assert_eq!(
+                schema["properties"]["recall_status"]["enum"], expected_recall_statuses,
                 "{name}.{field} recall status"
             );
-            assert_eq!(schema["properties"]["reason_codes"]["type"], "array", "{name}.{field}");
-            assert_eq!(schema["properties"]["abstained"]["type"], "boolean", "{name}.{field}");
-            assert_eq!(schema["properties"]["answerable"]["type"], "boolean", "{name}.{field}");
-            assert_eq!(schema["properties"]["fallback"]["type"], "object", "{name}.{field}");
+            assert_eq!(
+                schema["properties"]["reason_codes"]["type"], "array",
+                "{name}.{field}"
+            );
+            assert_eq!(
+                schema["properties"]["abstained"]["type"], "boolean",
+                "{name}.{field}"
+            );
+            assert_eq!(
+                schema["properties"]["answerable"]["type"], "boolean",
+                "{name}.{field}"
+            );
+            assert_eq!(
+                schema["properties"]["fallback"]["type"], "object",
+                "{name}.{field}"
+            );
         }
         for name in [
             "perseus_vault_recall_batch",
@@ -9703,8 +9732,7 @@ mod tests {
                 .find(|tool| tool["name"] == name)
                 .unwrap_or_else(|| panic!("missing {name}"));
             assert_eq!(
-                tool["inputSchema"]["properties"]["include_outcome"]["type"],
-                "boolean",
+                tool["inputSchema"]["properties"]["include_outcome"]["type"], "boolean",
                 "{name} must advertise include_outcome"
             );
         }
@@ -9727,9 +9755,21 @@ mod tests {
                 .find(|tool| tool["name"] == name)
                 .unwrap_or_else(|| panic!("missing {name}"));
             let outcome = &tool["outputSchema"]["properties"][field];
-            assert_eq!(outcome["properties"]["reason"]["minLength"], json!(1), "{name}.{field}");
-            assert_eq!(outcome["properties"]["reason_codes"]["minItems"], json!(1), "{name}.{field}");
-            assert_eq!(outcome["properties"]["reason_codes"]["maxItems"], json!(16), "{name}.{field}");
+            assert_eq!(
+                outcome["properties"]["reason"]["minLength"],
+                json!(1),
+                "{name}.{field}"
+            );
+            assert_eq!(
+                outcome["properties"]["reason_codes"]["minItems"],
+                json!(1),
+                "{name}.{field}"
+            );
+            assert_eq!(
+                outcome["properties"]["reason_codes"]["maxItems"],
+                json!(16),
+                "{name}.{field}"
+            );
             assert_eq!(
                 outcome["properties"]["fallback"]["properties"]["mode"]["enum"],
                 json!(["abstain", "canonical_retrieval"]),
@@ -9747,16 +9787,30 @@ mod tests {
                 .and_then(|value| value["description"].as_str())
             {
                 let description = description.to_ascii_lowercase();
-                assert!(description.contains("complete"), "{name} include_outcome must cover complete results");
-                assert!(description.contains("unavailable"), "{name} include_outcome must cover unavailable results");
+                assert!(
+                    description.contains("complete"),
+                    "{name} include_outcome must cover complete results"
+                );
+                assert!(
+                    description.contains("unavailable"),
+                    "{name} include_outcome must cover unavailable results"
+                );
             }
-            let workspace = input
-                .get("workspace_hash")
-                .or_else(|| input.get("queries").and_then(|value| value["items"]["properties"].get("workspace_hash")));
+            let workspace = input.get("workspace_hash").or_else(|| {
+                input
+                    .get("queries")
+                    .and_then(|value| value["items"]["properties"].get("workspace_hash"))
+            });
             if let Some(description) = workspace.and_then(|value| value["description"].as_str()) {
                 let description = description.to_ascii_lowercase();
-                assert!(description.contains("compatibility"), "{name} workspace compatibility must be explicit");
-                assert!(description.contains("strict"), "{name} workspace strict mode must be explicit");
+                assert!(
+                    description.contains("compatibility"),
+                    "{name} workspace compatibility must be explicit"
+                );
+                assert!(
+                    description.contains("strict"),
+                    "{name} workspace strict mode must be explicit"
+                );
             }
         }
 
@@ -9765,8 +9819,7 @@ mod tests {
             .find(|tool| tool["name"] == "perseus_vault_recall_when")
             .expect("recall_when must be registered");
         assert_eq!(
-            recall_when["inputSchema"]["properties"]["requesting_agent_id"]["type"],
-            "string",
+            recall_when["inputSchema"]["properties"]["requesting_agent_id"]["type"], "string",
             "recall_when must advertise the transport requester"
         );
     }
@@ -9805,7 +9858,7 @@ mod tests {
             None,
         );
         let v: Value = serde_json::from_str(&r).unwrap();
-                if &(v["isError"]) != &(json!(true)) {
+        if &(v["isError"]) != &(json!(true)) {
             panic!("test assertion failed");
         };
         let msg = v["content"][0]["text"].as_str().unwrap();
@@ -9821,7 +9874,7 @@ mod tests {
             None,
         );
         let v: Value = serde_json::from_str(&r).unwrap();
-                if &(v["fallback"]) != &(json!("consolidate")) {
+        if &(v["fallback"]) != &(json!("consolidate")) {
             panic!("test assertion failed");
         };
         assert_eq!(v["dry_run"], json!(true));
@@ -9855,20 +9908,21 @@ mod tests {
             None,
         );
         let v: Value = serde_json::from_str(&r).unwrap();
-                if &(v["deja_vu"]) != &(json!(false)) {
+        if &(v["deja_vu"]) != &(json!(false)) {
             panic!("test assertion failed");
         };
-                if !(v["message"]
-                .as_str()
-                .unwrap()
-                .contains("no prior failures recorded matching this action")) {
+        if !(v["message"]
+            .as_str()
+            .unwrap()
+            .contains("no prior failures recorded matching this action"))
+        {
             panic!("test assertion failed");
         };
 
         // Missing required `action` → clean MCP tool error (isError, §3.3).
         let r = call_tool("perseus_vault_check_failure_pattern", &db, json!({}), None);
         let v: Value = serde_json::from_str(&r).unwrap();
-                if &(v["isError"]) != &(json!(true)) {
+        if &(v["isError"]) != &(json!(true)) {
             panic!("test assertion failed");
         };
 
@@ -9893,20 +9947,20 @@ mod tests {
             None,
         );
         let v: Value = serde_json::from_str(&r).unwrap();
-                if &(v["captured"]) != &(json!(1)) {
+        if &(v["captured"]) != &(json!(1)) {
             panic!("test assertion failed");
         };
-                if &(v["created"]) != &(json!(1)) {
+        if &(v["created"]) != &(json!(1)) {
             panic!("test assertion failed");
         };
-                if &(v["notes"][0]["type"]) != &(json!("root-cause")) {
+        if &(v["notes"][0]["type"]) != &(json!("root-cause")) {
             panic!("test assertion failed");
         };
 
         // Empty payload → clean MCP tool error (isError, spec §3.3).
         let r = call_tool("perseus_vault_capture", &db, json!({"text": "  "}), None);
         let v: Value = serde_json::from_str(&r).unwrap();
-                if &(v["isError"]) != &(json!(true)) {
+        if &(v["isError"]) != &(json!(true)) {
             panic!("test assertion failed");
         };
 
@@ -9929,24 +9983,24 @@ mod tests {
         // create
         let r = call(json!({"command": "create", "path": "/memories/notes.md",
                             "file_text": "alpha\nbeta\ngamma"}));
-                if !(r.contains("created")) {
+        if !(r.contains("created")) {
             panic!("test assertion failed");
         };
 
         // view directory
         let r = call(json!({"command": "view", "path": "/memories"}));
         let v: Value = serde_json::from_str(&r).unwrap();
-                if &(v["files"]) != &(json!(["notes.md"])) {
+        if &(v["files"]) != &(json!(["notes.md"])) {
             panic!("test assertion failed");
         };
 
         // view file — numbered content
         let r = call(json!({"command": "view", "path": "/memories/notes.md"}));
-                if !(r.contains("beta")) {
+        if !(r.contains("beta")) {
             panic!("test assertion failed");
         };
         let v: Value = serde_json::from_str(&r).unwrap();
-                if !(v["content"].as_str().unwrap().contains("     2\tbeta")) {
+        if !(v["content"].as_str().unwrap().contains("     2\tbeta")) {
             panic!("test assertion failed");
         };
 
@@ -9955,26 +10009,26 @@ mod tests {
             json!({"command": "str_replace", "path": "/memories/notes.md",
                             "old_str": "beta", "new_str": "BETA"}),
         );
-                if !(r.contains("replaced")) {
+        if !(r.contains("replaced")) {
             panic!("test assertion failed");
         };
         let r = call(
             json!({"command": "str_replace", "path": "/memories/notes.md",
                             "old_str": "missing", "new_str": "x"}),
         );
-                if !(r.contains("not found")) {
+        if !(r.contains("not found")) {
             panic!("test assertion failed");
         };
 
         // insert at line 0
         let r = call(json!({"command": "insert", "path": "/memories/notes.md",
                             "insert_line": 0, "insert_text": "header"}));
-                if !(r.contains("inserted")) {
+        if !(r.contains("inserted")) {
             panic!("test assertion failed");
         };
         let r = call(json!({"command": "view", "path": "/memories/notes.md"}));
         let v: Value = serde_json::from_str(&r).unwrap();
-                if !(v["content"].as_str().unwrap().starts_with("     1\theader")) {
+        if !(v["content"].as_str().unwrap().starts_with("     1\theader")) {
             panic!("test assertion failed");
         };
 
@@ -9983,32 +10037,32 @@ mod tests {
             json!({"command": "rename", "old_path": "/memories/notes.md",
                             "new_path": "/memories/archive/notes.md"}),
         );
-                if !(r.contains("renamed")) {
+        if !(r.contains("renamed")) {
             panic!("test assertion failed");
         };
         let r = call(json!({"command": "view", "path": "/memories"}));
         let v: Value = serde_json::from_str(&r).unwrap();
-                if &(v["files"]) != &(json!(["archive/notes.md"])) {
+        if &(v["files"]) != &(json!(["archive/notes.md"])) {
             panic!("test assertion failed");
         };
 
         // path traversal is rejected
         let r = call(json!({"command": "view", "path": "/memories/../etc/passwd"}));
-                if !(r.contains("invalid path") || r.contains("error")) {
+        if !(r.contains("invalid path") || r.contains("error")) {
             panic!("test assertion failed");
         };
 
         // delete, then recreate: revival must restore searchability (the FTS
         // row is deleted by forget; the remember update path must re-insert it).
         let r = call(json!({"command": "delete", "path": "/memories/archive/notes.md"}));
-                if !(r.contains("deleted")) {
+        if !(r.contains("deleted")) {
             panic!("test assertion failed");
         };
         let r = call(
             json!({"command": "create", "path": "/memories/archive/notes.md",
                             "file_text": "reborn searchable zanzibar"}),
         );
-                if !(r.contains("created")) {
+        if !(r.contains("created")) {
             panic!("test assertion failed");
         };
         let hits = db
@@ -10050,7 +10104,7 @@ mod tests {
                    "valid_from_unix_ms": 1000}),
             None,
         );
-                if !(stored.contains("created")) {
+        if !(stored.contains("created")) {
             panic!("test assertion failed");
         };
         for prefix in ["perseus_vault"] {
@@ -10060,7 +10114,7 @@ mod tests {
                 json!({"category": "f", "key": "k", "valid_at_unix_ms": 2000}),
                 None,
             );
-                        if !(r.contains("\"found\":true")) {
+            if !(r.contains("\"found\":true")) {
                 panic!("test assertion failed");
             };
             let b = call_tool(
@@ -10070,7 +10124,7 @@ mod tests {
                        "tx_at_unix_ms": now_ms_for_test(), "valid_at_unix_ms": 2000}),
                 None,
             );
-                        if !(b.contains("\"found\":true")) {
+            if !(b.contains("\"found\":true")) {
                 panic!("test assertion failed");
             };
         }
@@ -10112,12 +10166,12 @@ mod tests {
                    "weight": 1.0, "author_trust_tier": 2}),
             None,
         );
-                if !(low.contains("\"created\":true")) {
+        if !(low.contains("\"created\":true")) {
             panic!("test assertion failed");
         };
         // #684: caller-asserted (no registered agent) → checked but not
         // registry-enforced. trust_enforced reflects registry backing only.
-                if !(low.contains("\"trust_enforced\":false")) {
+        if !(low.contains("\"trust_enforced\":false")) {
             panic!("test assertion failed");
         };
         let _ = call_tool(
@@ -10131,7 +10185,7 @@ mod tests {
         // get merges both, highest weight first.
         let got = call_tool("perseus_vault_keystone_get", &db, json!({}), None);
         let v: Value = serde_json::from_str(&got).unwrap();
-                if &(v["count"]) != &(json!(2)) {
+        if &(v["count"]) != &(json!(2)) {
             panic!("test assertion failed");
         };
         assert_eq!(
@@ -10151,12 +10205,12 @@ mod tests {
                    "weight": 5.0, "author_trust_tier": 2}),
             None,
         );
-                if !(again.contains("\"created\":false")) {
+        if !(again.contains("\"created\":false")) {
             panic!("test assertion failed");
         };
         let got2 = call_tool("perseus_vault_keystone_get", &db, json!({}), None);
         let v2: Value = serde_json::from_str(&got2).unwrap();
-                if &(v2["count"]) != &(json!(2)) {
+        if &(v2["count"]) != &(json!(2)) {
             panic!("test assertion failed");
         };
 
@@ -10167,7 +10221,7 @@ mod tests {
             json!({"content": "denied rule", "author_trust_tier": 1}),
             None,
         );
-                if !(denied.contains("insufficient trust tier")) {
+        if !(denied.contains("insufficient trust tier")) {
             panic!("test assertion failed");
         };
         // Omitting the tier is allowed but flagged as unenforced.
@@ -10177,7 +10231,7 @@ mod tests {
             json!({"content": "unenforced rule", "scope": "agent", "scope_id": "a1"}),
             None,
         );
-                if !(unenforced.contains("\"trust_enforced\":false")) {
+        if !(unenforced.contains("\"trust_enforced\":false")) {
             panic!("test assertion failed");
         };
 
@@ -10219,10 +10273,10 @@ mod tests {
             None,
         );
         let value: Value = serde_json::from_str(&response).expect("structured response");
-                if &(value["valid"]) != &(true) {
+        if &(value["valid"]) != &(true) {
             panic!("test assertion failed");
         };
-                if &(value["replay_match"]) != &(true) {
+        if &(value["replay_match"]) != &(true) {
             panic!("test assertion failed");
         };
         assert!(advertised_names().contains(&"perseus_vault_stage_trace_validate".to_string()));
@@ -10266,20 +10320,20 @@ mod tests {
             None,
         );
         let value: Value = serde_json::from_str(&response).expect("structured response");
-                if &(value["valid"]) != &(true) {
+        if &(value["valid"]) != &(true) {
             panic!("test assertion failed");
         };
-                if &(value["outcome"]) != &("degraded") {
+        if &(value["outcome"]) != &("degraded") {
             panic!("test assertion failed");
         };
-                if &(value["receipt"]["actual_lossiness"]) != &("lossy") {
+        if &(value["receipt"]["actual_lossiness"]) != &("lossy") {
             panic!("test assertion failed");
         };
         assert_eq!(value["receipt"]["input_digest"].as_str().unwrap().len(), 64);
-                if !(!response.contains("MCP_RAW_SENTINEL")) {
+        if !(!response.contains("MCP_RAW_SENTINEL")) {
             panic!("test assertion failed");
         };
-                if !(!response.contains("\"message\"")) {
+        if !(!response.contains("\"message\"")) {
             panic!("test assertion failed");
         };
         assert!(
@@ -10312,7 +10366,7 @@ mod tests {
             }),
             None,
         );
-                if !(reject.contains("\"rejected\":true")) {
+        if !(reject.contains("\"rejected\":true")) {
             panic!("test assertion failed");
         };
 
@@ -10331,7 +10385,7 @@ mod tests {
             }),
             None,
         );
-                if !(blocked.contains("rejected")) {
+        if !(blocked.contains("rejected")) {
             panic!("test assertion failed");
         };
 
@@ -10347,7 +10401,7 @@ mod tests {
             }),
             None,
         );
-                if !(blocked_variant.contains("rejected")) {
+        if !(blocked_variant.contains("rejected")) {
             panic!("test assertion failed");
         };
 
@@ -10363,7 +10417,7 @@ mod tests {
             }),
             None,
         );
-                if !(fine.contains("\"action\":\"created\"")) {
+        if !(fine.contains("\"action\":\"created\"")) {
             panic!("test assertion failed");
         };
 
@@ -10380,7 +10434,7 @@ mod tests {
             }),
             None,
         );
-                if !(other_ws.contains("\"action\":\"created\"")) {
+        if !(other_ws.contains("\"action\":\"created\"")) {
             panic!("test assertion failed");
         };
 
@@ -10397,7 +10451,7 @@ mod tests {
             }),
             None,
         );
-                if !(override_ok.contains("\"action\":\"created\"")) {
+        if !(override_ok.contains("\"action\":\"created\"")) {
             panic!("test assertion failed");
         };
 
@@ -10440,7 +10494,7 @@ mod tests {
             }),
             None,
         );
-                if !(corrected.contains("entity_id")) {
+        if !(corrected.contains("entity_id")) {
             panic!("test assertion failed");
         };
         let corr_val: Value = serde_json::from_str(&corrected).expect("correction response JSON");
@@ -10468,12 +10522,12 @@ mod tests {
 
         // An unknown tool name is reported verbatim — no prefix normalization.
         let result = call_tool("perseus_vault_bogus", &db, json!({}), None);
-                if !(result.contains("Unknown tool: perseus_vault_bogus")) {
+        if !(result.contains("Unknown tool: perseus_vault_bogus")) {
             panic!("test assertion failed");
         };
 
         let other = call_tool("custom_bogus", &db, json!({}), None);
-                if !(other.contains("Unknown tool: custom_bogus")) {
+        if !(other.contains("Unknown tool: custom_bogus")) {
             panic!("test assertion failed");
         };
 
@@ -10779,7 +10833,7 @@ mod tests {
 
         let detect = call_tool("perseus_vault_communities", &db, json!({}), None);
         let v: Value = serde_json::from_str(&detect).expect("valid JSON");
-                if &(v["communities"].as_array().unwrap().len()) != &(1) {
+        if &(v["communities"].as_array().unwrap().len()) != &(1) {
             panic!("test assertion failed");
         };
         let cid = v["communities"][0]["id"].as_str().unwrap().to_string();
@@ -10792,10 +10846,10 @@ mod tests {
             None,
         );
         let sv: Value = serde_json::from_str(&summary).expect("valid JSON");
-                if &(sv["community_id"].as_str().unwrap()) != &(cid) {
+        if &(sv["community_id"].as_str().unwrap()) != &(cid) {
             panic!("test assertion failed");
         };
-                if !(sv.get("isError").is_none()) {
+        if !(sv.get("isError").is_none()) {
             panic!("test assertion failed");
         };
 
@@ -10806,10 +10860,10 @@ mod tests {
             None,
         );
         let rv: Value = serde_json::from_str(&recall).expect("valid JSON");
-                if !(rv.get("isError").is_none()) {
+        if !(rv.get("isError").is_none()) {
             panic!("test assertion failed");
         };
-                if &(rv["communities"].as_array().unwrap().len()) != &(1) {
+        if &(rv["communities"].as_array().unwrap().len()) != &(1) {
             panic!("test assertion failed");
         };
 
@@ -11271,8 +11325,14 @@ mod tests {
             uuid::Uuid::new_v4()
         ));
         let db = Database::open(db_path.to_str().expect("temp db path")).expect("open temp db");
-        db.workspace_bind("strict-reader", "workspace-a", "read_write", "{}", "operator")
-            .expect("bind strict reader");
+        db.workspace_bind(
+            "strict-reader",
+            "workspace-a",
+            "read_write",
+            "{}",
+            "operator",
+        )
+        .expect("bind strict reader");
         let state = MCPState::new_with_profile_and_strict_scope(ToolProfile::Default, true);
         let initialize = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
@@ -11354,10 +11414,13 @@ mod tests {
             .result
             .expect("strict anonymous result");
         assert_eq!(denied["isError"], json!(true), "{denied}");
-        assert!(denied["content"][0]["text"]
-            .as_str()
-            .unwrap()
-            .contains("clientInfo.name"), "{denied}");
+        assert!(
+            denied["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("clientInfo.name"),
+            "{denied}"
+        );
 
         // A transport identity is not sufficient by itself: strict mode also
         // requires an active host binding and exact workspace equality.
@@ -11388,10 +11451,13 @@ mod tests {
             .result
             .expect("strict cross-scope result");
         assert_eq!(denied["isError"], json!(true), "{denied}");
-        assert!(denied["content"][0]["text"]
-            .as_str()
-            .unwrap()
-            .contains("cross-workspace"), "{denied}");
+        assert!(
+            denied["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("cross-workspace"),
+            "{denied}"
+        );
 
         let _ = std::fs::remove_file(db_path);
     }
@@ -11403,8 +11469,14 @@ mod tests {
             uuid::Uuid::new_v4()
         ));
         let db = Database::open(db_path.to_str().expect("temp db path")).expect("open temp db");
-        db.workspace_bind("strict-agent", "workspace-a", "read_write", "{}", "operator")
-            .expect("bind strict agent");
+        db.workspace_bind(
+            "strict-agent",
+            "workspace-a",
+            "read_write",
+            "{}",
+            "operator",
+        )
+        .expect("bind strict agent");
         db.workspace_bind("other-agent", "workspace-b", "read_write", "{}", "operator")
             .expect("bind other agent");
         let state = MCPState::new_with_profile_and_strict_scope(ToolProfile::Default, true);
@@ -11436,9 +11508,17 @@ mod tests {
             json!("strict-agent"),
             "got: {response}"
         );
-        let text = response["content"][0]["text"].as_str().expect("status text");
-        assert!(!text.contains("other-agent"), "cross-profile metadata leaked: {text}");
-        assert!(!text.contains("workspace-b"), "cross-workspace metadata leaked: {text}");
+        let text = response["content"][0]["text"]
+            .as_str()
+            .expect("status text");
+        assert!(
+            !text.contains("other-agent"),
+            "cross-profile metadata leaked: {text}"
+        );
+        assert!(
+            !text.contains("workspace-b"),
+            "cross-workspace metadata leaked: {text}"
+        );
 
         let _ = fs::remove_file(&db_path);
     }
@@ -11638,8 +11718,15 @@ mod tests {
             ("perseus_vault_declared_graph_query", ToolScope::Agent),
         ];
         for (name, scope) in expected {
-            assert!(registry.iter().any(|tool| tool["name"] == name), "missing registry tool {name}");
-            assert_eq!(tool_scope_rank(name), scope.rank(), "wrong scope for {name}");
+            assert!(
+                registry.iter().any(|tool| tool["name"] == name),
+                "missing registry tool {name}"
+            );
+            assert_eq!(
+                tool_scope_rank(name),
+                scope.rank(),
+                "wrong scope for {name}"
+            );
         }
     }
 
@@ -11661,7 +11748,9 @@ mod tests {
         assert!(state["properties"]["raw_prompt"].is_null());
         assert!(state["properties"]["model_reasoning"].is_null());
         assert!(tool["outputSchema"]["properties"]["serving"].is_object());
-        let required = state["required"].as_array().expect("task-state required fields");
+        let required = state["required"]
+            .as_array()
+            .expect("task-state required fields");
         for field in [
             "schema_version",
             "task_id",
@@ -11675,7 +11764,10 @@ mod tests {
             "base_sequence",
             "observed_input_digest",
         ] {
-            assert!(required.iter().any(|value| value == field), "missing required field {field}");
+            assert!(
+                required.iter().any(|value| value == field),
+                "missing required field {field}"
+            );
         }
     }
 
@@ -11688,10 +11780,7 @@ mod tests {
         let evidence = &recall["inputSchema"]["properties"]["evidence_lanes"];
         assert_eq!(evidence["type"], "array");
         assert_eq!(evidence["minItems"], 1);
-        assert_eq!(
-            evidence["items"]["enum"],
-            json!(["derived", "verbatim"])
-        );
+        assert_eq!(evidence["items"]["enum"], json!(["derived", "verbatim"]));
         assert!(recall["outputSchema"]["properties"]["evidence"].is_object());
     }
 
@@ -11704,7 +11793,10 @@ mod tests {
         let selection = &recall["inputSchema"]["properties"]["include_selection_decisions"];
         assert_eq!(selection["type"], "boolean");
         assert_eq!(selection["default"], false);
-        assert!(selection["description"].as_str().unwrap_or("").contains("#1140"));
+        assert!(selection["description"]
+            .as_str()
+            .unwrap_or("")
+            .contains("#1140"));
         assert!(recall["outputSchema"]["properties"]["fused_trace"].is_object());
     }
 
@@ -11717,19 +11809,20 @@ mod tests {
         let selection = &context["inputSchema"]["properties"]["include_selection_decisions"];
         assert_eq!(selection["type"], "boolean");
         assert_eq!(selection["default"], false);
-        assert!(selection["description"].as_str().unwrap_or("").contains("#1140"));
+        assert!(selection["description"]
+            .as_str()
+            .unwrap_or("")
+            .contains("#1140"));
         assert!(context["outputSchema"]["properties"]["selection_decisions"].is_object());
     }
 
     #[test]
     fn lean_profile_exposes_only_the_core_memory_surface() {
-        let mut names: Vec<String> = filter_registry_by_profile(
-            tool_registry_base().clone(),
-            ToolProfile::Lean,
-        )
-        .into_iter()
-        .filter_map(|tool| tool.get("name").and_then(Value::as_str).map(str::to_owned))
-        .collect();
+        let mut names: Vec<String> =
+            filter_registry_by_profile(tool_registry_base().clone(), ToolProfile::Lean)
+                .into_iter()
+                .filter_map(|tool| tool.get("name").and_then(Value::as_str).map(str::to_owned))
+                .collect();
         names.sort();
         assert_eq!(
             names,
@@ -11764,8 +11857,14 @@ mod tests {
     #[test]
     fn default_and_all_profiles_preserve_the_full_registry() {
         let full_len = tool_registry_base().len();
-        assert_eq!(filter_registry_by_profile(tool_registry_base().clone(), ToolProfile::Default).len(), full_len);
-        assert_eq!(filter_registry_by_profile(tool_registry_base().clone(), ToolProfile::All).len(), full_len);
+        assert_eq!(
+            filter_registry_by_profile(tool_registry_base().clone(), ToolProfile::Default).len(),
+            full_len
+        );
+        assert_eq!(
+            filter_registry_by_profile(tool_registry_base().clone(), ToolProfile::All).len(),
+            full_len
+        );
     }
 
     #[test]
@@ -11840,9 +11939,17 @@ mod tests {
             json!("default-test"),
             "got: {response}"
         );
-        let text = response["content"][0]["text"].as_str().expect("status text");
-        assert!(!text.contains("other-agent"), "cross-profile metadata leaked: {text}");
-        assert!(!text.contains("workspace-b"), "cross-workspace metadata leaked: {text}");
+        let text = response["content"][0]["text"]
+            .as_str()
+            .expect("status text");
+        assert!(
+            !text.contains("other-agent"),
+            "cross-profile metadata leaked: {text}"
+        );
+        assert!(
+            !text.contains("workspace-b"),
+            "cross-workspace metadata leaked: {text}"
+        );
 
         let null_call = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
@@ -11867,8 +11974,14 @@ mod tests {
         let null_text = null_response["content"][0]["text"]
             .as_str()
             .expect("null-arguments status text");
-        assert!(!null_text.contains("other-agent"), "cross-profile metadata leaked: {null_text}");
-        assert!(!null_text.contains("workspace-b"), "cross-workspace metadata leaked: {null_text}");
+        assert!(
+            !null_text.contains("other-agent"),
+            "cross-profile metadata leaked: {null_text}"
+        );
+        assert!(
+            !null_text.contains("workspace-b"),
+            "cross-workspace metadata leaked: {null_text}"
+        );
 
         let _ = fs::remove_file(&db_path);
     }
@@ -11913,9 +12026,17 @@ mod tests {
             json!("lean-test"),
             "got: {response}"
         );
-        let text = response["content"][0]["text"].as_str().expect("status text");
-        assert!(!text.contains("other-agent"), "cross-profile metadata leaked: {text}");
-        assert!(!text.contains("workspace-b"), "cross-workspace metadata leaked: {text}");
+        let text = response["content"][0]["text"]
+            .as_str()
+            .expect("status text");
+        assert!(
+            !text.contains("other-agent"),
+            "cross-profile metadata leaked: {text}"
+        );
+        assert!(
+            !text.contains("workspace-b"),
+            "cross-workspace metadata leaked: {text}"
+        );
 
         let _ = fs::remove_file(&db_path);
     }
